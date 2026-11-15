@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout extension
+        uses: actions/checkout@v4
+        with:
+          path: extension
+
+      - name: Checkout sibling sdk
+        uses: actions/checkout@v4
+        with:
+          repository: parabellum-kernel/sdk
+          path: sdk
+
+      - name: Setup Zig 0.17.1
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+
+      - name: Build & Test
+        working-directory: extension
+        run: |
+          zig build
+          zig build test

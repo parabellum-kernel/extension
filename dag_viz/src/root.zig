@@ -1,15 +1,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const kernel = flowdata.kernel;
+const parabellum = @import("parabellum");
+const kernel = parabellum.kernel;
 const KernelContext = kernel.KernelContext;
 const Extension = kernel.Extension;
 const TelemetryEvent = kernel.TelemetryEvent;
 const TelemetrySubscriber = kernel.TelemetrySubscriber;
-const PipelineAST = flowdata.ast.PipelineAST;
-const InvocationRequest = flowdata.transport.inbound.InvocationRequest;
-const InvocationResponse = flowdata.transport.inbound.InvocationResponse;
-const InvocationStatus = flowdata.transport.inbound.InvocationStatus;
+const PipelineAST = parabellum.ast.PipelineAST;
+const InvocationRequest = parabellum.transport.inbound.InvocationRequest;
+const InvocationResponse = parabellum.transport.inbound.InvocationResponse;
+const InvocationStatus = parabellum.transport.inbound.InvocationStatus;
 
 pub const topology = @import("topology.zig");
 pub const render_mermaid = @import("render_mermaid.zig");
@@ -127,7 +127,7 @@ pub const DagVizExtension = struct {
     pub fn extension(self: *DagVizExtension) Extension {
         const Trampoline = struct {
             fn getName(_: *const anyopaque) []const u8 {
-                return "flowdata.dag_viz";
+                return "parabellum.dag_viz";
             }
 
             fn register(ctx_ptr: *anyopaque, k: *KernelContext) anyerror!void {
@@ -184,7 +184,7 @@ pub fn getGlobalDag(allocator: Allocator) *DagVizExtension {
     return &global_dag_instance.?;
 }
 
-pub const extension = Extension.fromStateless("flowdata.dag_viz", struct {
+pub const extension = Extension.fromStateless("parabellum.dag_viz", struct {
     fn reg(k: *KernelContext) anyerror!void {
         const ext = getGlobalDag(k.allocator);
         try k.use(ext.extension());

@@ -1,10 +1,10 @@
 .{
-    .name = .flowdata_extensions,
+    .name = .parabellum_extensions,
     .version = "1.0.0",
     .minimum_zig_version = "0.17.1",
     .fingerprint = 0x8d84633a515ef659,
     .dependencies = .{
-        .flowdata_sdk = .{
+        .parabellum_sdk = .{
             .path = "../sdk",
         },
     },

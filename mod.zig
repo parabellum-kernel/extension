@@ -1,8 +1,8 @@
 const std = @import("std");
-const flowdata = @import("flowdata");
-const KernelContext = flowdata.kernel.KernelContext;
+const parabellum = @import("parabellum");
+const KernelContext = parabellum.kernel.KernelContext;
 
-pub const datasource = @import("flowdata_drivers");
+pub const datasource = @import("parabellum_drivers");
 pub const datasources = datasource;
 pub const artifact = @import("artifact/src/root.zig");
 pub const trace_jsonl = @import("trace_jsonl/src/root.zig");

@@ -1,9 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const contracts = flowdata.transport.inbound.contracts;
-const registry_mod = flowdata.transport.inbound.registry;
-const posix_socket = flowdata.transport.common.posix_socket;
+const parabellum = @import("parabellum");
+const contracts = parabellum.transport.inbound.contracts;
+const registry_mod = parabellum.transport.inbound.registry;
+const posix_socket = parabellum.transport.common.posix_socket;
 
 pub const InboundTransport = contracts.InboundTransport;
 pub const HostTransport = contracts.HostTransport;
@@ -12,11 +12,11 @@ pub const InvocationResponse = contracts.InvocationResponse;
 pub const InvocationCommand = contracts.InvocationCommand;
 pub const OutputFormat = contracts.OutputFormat;
 pub const InboundTransportConfig = registry_mod.InboundTransportConfig;
-pub const NetworkTimeouts = flowdata.transport.NetworkTimeouts;
+pub const NetworkTimeouts = parabellum.transport.NetworkTimeouts;
 
 const c = std.c;
 
-/// High-performance HTTP REST Transport for Flowdata pipelines.
+/// High-performance HTTP REST Transport for Parabellum pipelines.
 /// Exposes daemon endpoints (`/v1/health`, `/v1/validate`, `/v1/run`, `/v1/jobs`, `/v1/custom/*`) and converts incoming HTTP requests
 /// to agnostic `InvocationRequest` envelopes.
 pub const HttpServerTransport = struct {

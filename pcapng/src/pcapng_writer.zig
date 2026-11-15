@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const contracts = flowdata.transport.outbound.contracts;
+const parabellum = @import("parabellum");
+const contracts = parabellum.transport.outbound.contracts;
 const PacketSink = contracts.PacketSink;
 const NetExchange = contracts.NetExchange;
 const NetResult = contracts.NetResult;
@@ -112,7 +112,7 @@ pub const PcapngWriter = struct {
                     if (result.proxy_used.len > 0) result.proxy_used else "direct",
                     result.verdict.asText(),
                 },
-            ) catch "flowdata_pkt")
+            ) catch "parabellum_pkt")
         else
             (std.fmt.bufPrint(
                 &comment_buf,
@@ -122,7 +122,7 @@ pub const PcapngWriter = struct {
                     if (result.proxy_used.len > 0) result.proxy_used else "direct",
                     result.verdict.asText(),
                 },
-            ) catch "flowdata_pkt");
+            ) catch "parabellum_pkt");
 
         var pkt_buf: [512]u8 = undefined;
         const l7_payload = if (result.wire_response.len > 0)

@@ -12,7 +12,7 @@ pub fn renderHtml(allocator: Allocator, graph: *const DagTopologyGraph) ![]u8 {
         \\<html lang="en">
         \\<head>
         \\  <meta charset="UTF-8">
-        \\  <title>Flowdata Reactive Pipeline DAG</title>
+        \\  <title>Parabellum Reactive Pipeline DAG</title>
         \\  <style>
         \\    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; display: flex; height: 100vh; background: #0f172a; color: #f8fafc; }
         \\    #canvas-container { flex: 1; position: relative; overflow: hidden; background: radial-gradient(#1e293b 1px, transparent 1px); background-size: 24px 24px; }

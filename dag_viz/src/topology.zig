@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const PipelineAST = flowdata.ast.PipelineAST;
+const parabellum = @import("parabellum");
+const PipelineAST = parabellum.ast.PipelineAST;
 
 pub const DagNodeKind = enum {
     task_step,

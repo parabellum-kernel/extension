@@ -1,8 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const contracts = flowdata.transport.inbound.contracts;
-const registry_mod = flowdata.transport.inbound.registry;
+const parabellum = @import("parabellum");
+const contracts = parabellum.transport.inbound.contracts;
+const registry_mod = parabellum.transport.inbound.registry;
 
 pub const InboundTransport = contracts.InboundTransport;
 pub const HostTransport = contracts.HostTransport;
@@ -12,9 +12,9 @@ pub const InvocationCommand = contracts.InvocationCommand;
 pub const OutputFormat = contracts.OutputFormat;
 pub const InboundTransportConfig = registry_mod.InboundTransportConfig;
 
-/// gRPC Wire Transport implementation for Flowdata pipelines.
+/// gRPC Wire Transport implementation for Parabellum pipelines.
 /// Implements standard gRPC 5-byte framing (`[compressed: 1B][length: 4B BE]`) and dispatches
-/// RPCs against the `flowdata.v2.PipelineService` contract.
+/// RPCs against the `parabellum.v2.PipelineService` contract.
 pub const GrpcTransport = struct {
     comptime {
         InboundTransport.assertImplements(@This());
@@ -105,7 +105,7 @@ pub const GrpcTransport = struct {
         return frame_bytes[5 .. 5 + msg_len];
     }
 
-    /// Processes an incoming gRPC service call (`/flowdata.v2.PipelineService/Run`, etc.),
+    /// Processes an incoming gRPC service call (`/parabellum.v2.PipelineService/Run`, etc.),
     /// decodes the message frame, delegates to `InboundDispatcher`, and returns an encoded gRPC response frame.
     pub fn handleGrpcCall(
         self: *GrpcTransport,

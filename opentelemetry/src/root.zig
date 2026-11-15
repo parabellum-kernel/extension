@@ -1,15 +1,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const kernel = flowdata.kernel;
+const parabellum = @import("parabellum");
+const kernel = parabellum.kernel;
 const KernelContext = kernel.KernelContext;
 const Extension = kernel.Extension;
 const TelemetryEvent = kernel.TelemetryEvent;
 const TelemetrySubscriber = kernel.TelemetrySubscriber;
-const RepositoryRegistry = flowdata.RepositoryRegistry;
-const PayloadHandle = flowdata.dataflow.PayloadHandle;
-const AdapterConfig = flowdata.transport.outbound.contracts.AdapterConfig;
-const NetMiddleware = flowdata.transport.outbound.contracts.NetMiddleware;
+const RepositoryRegistry = parabellum.RepositoryRegistry;
+const PayloadHandle = parabellum.dataflow.PayloadHandle;
+const AdapterConfig = parabellum.transport.outbound.contracts.AdapterConfig;
+const NetMiddleware = parabellum.transport.outbound.contracts.NetMiddleware;
 
 pub const span = @import("span.zig");
 pub const metrics = @import("metrics.zig");
@@ -23,7 +23,7 @@ pub const OtelTracePropagationMiddleware = propagation_mw.OtelTracePropagationMi
 
 pub const OpenTelemetryExtension = struct {
     allocator: Allocator,
-    service_name: []const u8 = "flowdata",
+    service_name: []const u8 = "parabellum",
     completed_spans: std.ArrayListUnmanaged(OtelSpan) = .empty,
     active_spans: std.AutoHashMapUnmanaged([8]u8, OtelSpan) = .empty,
     log_records: std.ArrayListUnmanaged(OtelLogRecord) = .empty,
@@ -96,11 +96,11 @@ pub const OpenTelemetryExtension = struct {
                     .end_time_unix_nano = 0,
                     .status = .ok,
                 };
-                const k1 = self.allocator.dupe(u8, "flowdata.pipeline") catch return;
+                const k1 = self.allocator.dupe(u8, "parabellum.pipeline") catch return;
                 const v1 = self.allocator.dupe(u8, st.pipeline_name) catch return;
                 step_span.attributes.append(self.allocator, .{ .key = k1, .value = v1 }) catch {};
 
-                const k2 = self.allocator.dupe(u8, "flowdata.step_id") catch return;
+                const k2 = self.allocator.dupe(u8, "parabellum.step_id") catch return;
                 const v2 = self.allocator.dupe(u8, st.step_id) catch return;
                 step_span.attributes.append(self.allocator, .{ .key = k2, .value = v2 }) catch {};
 
@@ -129,12 +129,12 @@ pub const OpenTelemetryExtension = struct {
                     .status = .ok,
                 };
                 if (rd.matched_expression) |expr| {
-                    const k = self.allocator.dupe(u8, "flowdata.router_matched") catch return;
+                    const k = self.allocator.dupe(u8, "parabellum.router_matched") catch return;
                     const v = self.allocator.dupe(u8, expr) catch return;
                     r_span.attributes.append(self.allocator, .{ .key = k, .value = v }) catch {};
                 }
                 if (rd.target_pipeline) |target| {
-                    const k = self.allocator.dupe(u8, "flowdata.target_pipeline") catch return;
+                    const k = self.allocator.dupe(u8, "parabellum.target_pipeline") catch return;
                     const v = self.allocator.dupe(u8, target) catch return;
                     r_span.attributes.append(self.allocator, .{ .key = k, .value = v }) catch {};
                 }
@@ -183,7 +183,7 @@ pub const OpenTelemetryExtension = struct {
             }
 
             if (self.export_file_path) |path| {
-                try flowdata.writeFileBytes(self.allocator, path, json_bytes);
+                try parabellum.writeFileBytes(self.allocator, path, json_bytes);
             }
         }
     }
@@ -212,7 +212,7 @@ pub const OpenTelemetryExtension = struct {
     pub fn extension(self: *OpenTelemetryExtension) Extension {
         const Trampoline = struct {
             fn getName(_: *const anyopaque) []const u8 {
-                return "flowdata.opentelemetry";
+                return "parabellum.opentelemetry";
             }
 
             fn register(ctx_ptr: *anyopaque, k: *KernelContext) anyerror!void {
@@ -257,15 +257,15 @@ fn getEnv(name: [*:0]const u8) ?[]const u8 {
 
 pub fn getGlobalOtel(allocator: Allocator) *OpenTelemetryExtension {
     if (global_otel_instance == null) {
-        const svc_name = getEnv("OTEL_SERVICE_NAME") orelse "flowdata";
+        const svc_name = getEnv("OTEL_SERVICE_NAME") orelse "parabellum";
         var inst = OpenTelemetryExtension.init(allocator, svc_name);
-        inst.export_file_path = getEnv("OTEL_EXPORTER_FILE_PATH") orelse getEnv("FLOWDATA_OTEL_OUT");
+        inst.export_file_path = getEnv("OTEL_EXPORTER_FILE_PATH") orelse getEnv("PARABELLUM_OTEL_OUT");
         global_otel_instance = inst;
     }
     return &global_otel_instance.?;
 }
 
-pub const extension = Extension.fromStateless("flowdata.opentelemetry", struct {
+pub const extension = Extension.fromStateless("parabellum.opentelemetry", struct {
     fn reg(k: *KernelContext) anyerror!void {
         const ext = getGlobalOtel(k.allocator);
         try k.use(ext.extension());

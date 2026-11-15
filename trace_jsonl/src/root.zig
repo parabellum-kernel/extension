@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const kernel = flowdata.kernel;
+const parabellum = @import("parabellum");
+const kernel = parabellum.kernel;
 const TelemetryEvent = kernel.TelemetryEvent;
 const TelemetrySubscriber = kernel.TelemetrySubscriber;
 const KernelContext = kernel.KernelContext;
@@ -302,11 +302,11 @@ pub const JsonlTraceExtension = struct {
         }
     }
 
-    pub fn flush(self: *JsonlTraceExtension, _: *flowdata.RepositoryRegistry) anyerror!void {
+    pub fn flush(self: *JsonlTraceExtension, _: *parabellum.RepositoryRegistry) anyerror!void {
         if (self.output_path) |path| {
             const lines = try self.tracer.toJsonLines(self.allocator);
             defer self.allocator.free(lines);
-            try flowdata.writeFileBytes(self.allocator, path, lines);
+            try parabellum.writeFileBytes(self.allocator, path, lines);
         }
     }
 
@@ -317,7 +317,7 @@ pub const JsonlTraceExtension = struct {
                 s.onEvent(event);
             }
 
-            fn doFlush(ctx: *anyopaque, repos: *flowdata.RepositoryRegistry) anyerror!void {
+            fn doFlush(ctx: *anyopaque, repos: *parabellum.RepositoryRegistry) anyerror!void {
                 const s: *JsonlTraceExtension = @ptrCast(@alignCast(ctx));
                 try s.flush(repos);
             }
@@ -334,7 +334,7 @@ pub const JsonlTraceExtension = struct {
     pub fn extension(self: *JsonlTraceExtension) Extension {
         const Trampoline = struct {
             fn getName(_: *const anyopaque) []const u8 {
-                return "flowdata.trace_jsonl.instance";
+                return "parabellum.trace_jsonl.instance";
             }
 
             fn register(ctx_ptr: *anyopaque, k: *KernelContext) anyerror!void {
@@ -370,13 +370,13 @@ fn getEnv(name: [*:0]const u8) ?[]const u8 {
 
 pub fn getGlobalTrace(allocator: Allocator) *JsonlTraceExtension {
     if (default_inst == null) {
-        const out_path = getEnv("FLOWDATA_TRACE_OUT");
+        const out_path = getEnv("PARABELLUM_TRACE_OUT");
         default_inst = JsonlTraceExtension.init(allocator, out_path);
     }
     return &default_inst.?;
 }
 
-pub const extension = Extension.fromStateless("flowdata.trace_jsonl", struct {
+pub const extension = Extension.fromStateless("parabellum.trace_jsonl", struct {
     fn reg(k: *KernelContext) anyerror!void {
         const ext = getGlobalTrace(k.allocator);
         try k.use(ext.extension());

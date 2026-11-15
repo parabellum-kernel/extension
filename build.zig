@@ -1,11 +1,11 @@
 const std = @import("std");
-const sdk_build = @import("flowdata_sdk");
+const sdk_build = @import("parabellum_sdk");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const sdk_dep = b.dependency("flowdata_sdk", .{
+    const sdk_dep = b.dependency("parabellum_sdk", .{
         .target = target,
         .optimize = optimize,
     });

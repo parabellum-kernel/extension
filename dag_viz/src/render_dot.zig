@@ -7,7 +7,7 @@ pub fn renderDot(allocator: Allocator, graph: *const DagTopologyGraph) ![]u8 {
     var out: std.ArrayListUnmanaged(u8) = .empty;
     errdefer out.deinit(allocator);
 
-    try out.appendSlice(allocator, "digraph FlowdataDAG {\n  rankdir=TB;\n  node [fontname=\"sans-serif\", fontsize=10];\n  edge [fontname=\"sans-serif\", fontsize=9];\n\n");
+    try out.appendSlice(allocator, "digraph ParabellumDAG {\n  rankdir=TB;\n  node [fontname=\"sans-serif\", fontsize=10];\n  edge [fontname=\"sans-serif\", fontsize=9];\n\n");
 
     for (graph.nodes.items) |node| {
         try out.appendSlice(allocator, "  \"");

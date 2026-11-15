@@ -15,7 +15,7 @@ pub fn serializeOtlpJson(
 
     try out.appendSlice(allocator, "{\n  \"resourceSpans\": [\n    {\n      \"resource\": {\n        \"attributes\": [\n          {\"key\": \"service.name\", \"value\": {\"stringValue\": \"");
     try out.appendSlice(allocator, service_name);
-    try out.appendSlice(allocator, "\"}}\n        ]\n      },\n      \"scopeSpans\": [\n        {\n          \"scope\": {\"name\": \"flowdata.core\"},\n          \"spans\": [\n");
+    try out.appendSlice(allocator, "\"}}\n        ]\n      },\n      \"scopeSpans\": [\n        {\n          \"scope\": {\"name\": \"parabellum.core\"},\n          \"spans\": [\n");
 
     for (spans, 0..) |s, idx| {
         const trace_hex = std.fmt.bytesToHex(s.trace_id, .lower);

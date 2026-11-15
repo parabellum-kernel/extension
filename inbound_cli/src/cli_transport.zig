@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const contracts = flowdata.transport.inbound.contracts;
+const parabellum = @import("parabellum");
+const contracts = parabellum.transport.inbound.contracts;
 
 pub const InboundTransport = contracts.InboundTransport;
 pub const HostTransport = contracts.HostTransport;
@@ -36,7 +36,7 @@ pub fn printStderr(msg: []const u8) void {
     _ = std.c.write(std.c.STDERR_FILENO, msg.ptr, msg.len);
 }
 
-/// Command-Line Interface Transport for Flowdata applications.
+/// Command-Line Interface Transport for Parabellum applications.
 /// Implements polymorphic `InboundTransport` and executes invocations from standard OS arguments.
 pub const CliTransport = struct {
     comptime {

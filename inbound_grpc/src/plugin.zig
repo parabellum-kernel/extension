@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdk = @import("flowdata_sdk");
+const sdk = @import("parabellum_sdk");
 const abi = sdk.abi;
 
 fn registerInboundGrpc(_: *abi.extension.KernelHandle_ABI, _: *const abi.KernelApiVTable_ABI) anyerror!void {}

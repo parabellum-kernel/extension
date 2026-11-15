@@ -1,5 +1,5 @@
 const std = @import("std");
-const sdk = @import("flowdata_sdk");
+const sdk = @import("parabellum_sdk");
 const abi = sdk.abi;
 
 var packets_captured: usize = 0;

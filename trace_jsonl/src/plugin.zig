@@ -1,8 +1,8 @@
 const std = @import("std");
-const sdk = @import("flowdata_sdk");
+const sdk = @import("parabellum_sdk");
 const abi = sdk.abi;
 
-/// Standalone C-ABI Trace JSONL Extension (zero dependency on `flowdata` core source).
+/// Standalone C-ABI Trace JSONL Extension (zero dependency on `parabellum` core source).
 var events_logged: usize = 0;
 
 fn onEvent(_: *abi.extension.SubscriberCtx_ABI, ev: *const abi.TelemetryEvent_ABI) callconv(.c) void {

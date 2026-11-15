@@ -1,18 +1,18 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const flowdata = @import("flowdata");
-const kernel = flowdata.kernel;
+const parabellum = @import("parabellum");
+const kernel = parabellum.kernel;
 const KernelContext = kernel.KernelContext;
 const Extension = kernel.Extension;
 const TelemetryEvent = kernel.TelemetryEvent;
 const TelemetrySubscriber = kernel.TelemetrySubscriber;
-const OutboundRegistry = flowdata.transport.outbound.OutboundRegistry;
-const AdapterConfig = flowdata.transport.outbound.contracts.AdapterConfig;
-const CaptureSpec = flowdata.transport.outbound.contracts.CaptureSpec;
-const PacketSink = flowdata.transport.outbound.contracts.PacketSink;
-const NetworkSpec = flowdata.transport.outbound.contracts.NetworkSpec;
-const RepositoryRegistry = flowdata.RepositoryRegistry;
-const PayloadHandle = flowdata.dataflow.PayloadHandle;
+const OutboundRegistry = parabellum.transport.outbound.OutboundRegistry;
+const AdapterConfig = parabellum.transport.outbound.contracts.AdapterConfig;
+const CaptureSpec = parabellum.transport.outbound.contracts.CaptureSpec;
+const PacketSink = parabellum.transport.outbound.contracts.PacketSink;
+const NetworkSpec = parabellum.transport.outbound.contracts.NetworkSpec;
+const RepositoryRegistry = parabellum.RepositoryRegistry;
+const PayloadHandle = parabellum.dataflow.PayloadHandle;
 
 pub const pcapng_writer = @import("pcapng_writer.zig");
 pub const PcapngWriter = pcapng_writer.PcapngWriter;
@@ -208,7 +208,7 @@ pub fn registerOutboundSink(reg: *OutboundRegistry) !void {
     try reg.registerSinkFactory(&globalSinkFactory);
 }
 
-pub const extension = Extension.fromStateless("flowdata.pcapng", struct {
+pub const extension = Extension.fromStateless("parabellum.pcapng", struct {
     fn reg(k: *KernelContext) anyerror!void {
         const ext = getGlobalExtension(k.allocator);
         try k.outbound.registerSinkFactory(&globalSinkFactory);

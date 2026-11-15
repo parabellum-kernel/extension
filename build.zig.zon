@@ -1,0 +1,23 @@
+.{
+    .name = .flowdata_extensions,
+    .version = "0.2.0",
+    .minimum_zig_version = "0.17.1",
+    .fingerprint = 0x8d84633a515ef659,
+    .dependencies = .{
+        .flowdata_sdk = .{
+            .path = "../flowdata-sdk",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "artifact",
+        "dag_viz",
+        "inbound_cli",
+        "inbound_http",
+        "inbound_grpc",
+        "opentelemetry",
+        "pcapng",
+        "trace_jsonl",
+    },
+}

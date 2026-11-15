@@ -13,16 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout extension
-        uses: actions/checkout@v4
-        with:
-          path: extension
-
-      - name: Checkout sibling sdk
-        uses: actions/checkout@v4
-        with:
-          repository: parabellum-kernel/sdk
-          path: sdk
+      - uses: actions/checkout@v4
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
@@ -30,7 +21,6 @@ jobs:
           version: ${{ vars.ZIG_VERSION || env.ZIG_VERSION }}
 
       - name: Build & Test
-        working-directory: extension
         run: |
           zig build
           zig build test

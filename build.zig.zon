@@ -2,7 +2,7 @@
     .name = .parabellum_extensions,
     .version = "1.0.0",
     .minimum_zig_version = "0.17.1",
-    .fingerprint = 0x8d84633a515ef659,
+    .fingerprint = 0xae71b774c2716dae,
     .dependencies = .{
         .parabellum_sdk = .{
             .path = "../sdk",

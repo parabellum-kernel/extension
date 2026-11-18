@@ -6,7 +6,7 @@ fn registerArtifact(_: *abi.extension.KernelHandle_ABI, _: *const abi.KernelApiV
 
 pub const manifest = sdk.sdk.defineExtension(.{
     .name = "artifact",
-    .version = .{ .major = 1, .minor = 3, .patch = 1 },
+    .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerArtifact,
 });
 

@@ -81,7 +81,7 @@ fn registerInboundCli(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.K
 
 pub const manifest = sdk.sdk.defineExtension(.{
     .name = "inbound_cli",
-    .version = .{ .major = 1, .minor = 3, .patch = 1 },
+    .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerInboundCli,
 });
 

@@ -133,7 +133,7 @@ fn registerOpenTelemetry(
 
 pub const manifest = sdk.sdk.defineExtension(.{
     .name = "opentelemetry",
-    .version = .{ .major = 2, .minor = 0, .patch = 0 },
+    .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerOpenTelemetry,
 });
 

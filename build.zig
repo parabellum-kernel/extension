@@ -14,6 +14,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "artifact", .path = "artifact/src/plugin.zig" },
         .{ .name = "dag_viz", .path = "dag_viz/src/plugin.zig" },
         .{ .name = "inbound_cli", .path = "inbound_cli/src/plugin.zig" },
+        .{ .name = "inbound_fs", .path = "inbound_fs/src/plugin.zig" },
         .{ .name = "inbound_http", .path = "inbound_http/src/plugin.zig" },
         .{ .name = "inbound_grpc", .path = "inbound_grpc/src/plugin.zig" },
         .{ .name = "opentelemetry", .path = "opentelemetry/src/plugin.zig" },

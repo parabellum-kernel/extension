@@ -5,7 +5,8 @@
     .fingerprint = 0xae71b774c2716dae,
     .dependencies = .{
         .parabellum_sdk = .{
-            .path = "../sdk",
+            .url = "git+https://github.com/parabellum-kernel/sdk.git#2893913609999afddc04885a33f1607882ebaf38",
+            .hash = "parabellum_sdk-1.2.0-46CU-qagAwABUpcmWPXJyOXe4RaDDX_Mw4mfUGSdq4QN",
         },
     },
     .paths = .{
@@ -14,6 +15,7 @@
         "artifact",
         "dag_viz",
         "inbound_cli",
+        "inbound_fs",
         "inbound_http",
         "inbound_grpc",
         "opentelemetry",

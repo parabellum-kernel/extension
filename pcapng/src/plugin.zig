@@ -24,7 +24,7 @@ fn registerPcapng(
 
 pub const manifest = sdk.sdk.defineExtension(.{
     .name = "pcapng",
-    .version = .{ .major = 1, .minor = 3, .patch = 0 },
+    .version = .{ .major = 1, .minor = 3, .patch = 1 },
     .register = registerPcapng,
 });
 

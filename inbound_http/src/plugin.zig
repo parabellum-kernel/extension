@@ -72,7 +72,7 @@ fn registerInboundHttp(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.
     if (rc != .ok) return error.RegisterInboundTransportFailed;
 }
 
-pub const manifest = sdk.sdk.defineExtension(.{
+pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_http",
     .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerInboundHttp,

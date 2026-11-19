@@ -131,7 +131,7 @@ fn registerOpenTelemetry(
     if (rc != .ok) return error.SubscribeFailed;
 }
 
-pub const manifest = sdk.sdk.defineExtension(.{
+pub const manifest = sdk.extension.Extension.define(.{
     .name = "opentelemetry",
     .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerOpenTelemetry,

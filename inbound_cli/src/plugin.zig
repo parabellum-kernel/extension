@@ -79,7 +79,7 @@ fn registerInboundCli(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.K
     if (rc != .ok) return error.TransportRegistrationFailed;
 }
 
-pub const manifest = sdk.sdk.defineExtension(.{
+pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_cli",
     .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerInboundCli,

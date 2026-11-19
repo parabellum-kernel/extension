@@ -22,7 +22,7 @@ fn registerPcapng(
     if (rc != .ok) return error.SubscribeFailed;
 }
 
-pub const manifest = sdk.sdk.defineExtension(.{
+pub const manifest = sdk.extension.Extension.define(.{
     .name = "pcapng",
     .version = .{ .major = 2, .minor = 0, .patch = 1 },
     .register = registerPcapng,

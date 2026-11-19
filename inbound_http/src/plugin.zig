@@ -74,7 +74,7 @@ fn registerInboundHttp(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_http",
-    .version = .{ .major = 2, .minor = 0, .patch = 1 },
+    .version = .{ .major = 2, .minor = 0, .patch = 2 },
     .register = registerInboundHttp,
 });
 

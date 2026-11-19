@@ -6,7 +6,7 @@ fn registerDagViz(_: *abi.extension.KernelHandle_ABI, _: *const abi.KernelApiVTa
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "dag_viz",
-    .version = .{ .major = 2, .minor = 0, .patch = 1 },
+    .version = .{ .major = 2, .minor = 0, .patch = 2 },
     .register = registerDagViz,
 });
 

@@ -11,7 +11,6 @@ pub fn build(b: *std.Build) void {
     });
 
     const extensions = [_]struct { name: []const u8, path: []const u8 }{
-        .{ .name = "artifact", .path = "artifact/src/plugin.zig" },
         .{ .name = "dag_viz", .path = "dag_viz/src/plugin.zig" },
         .{ .name = "inbound_cli", .path = "inbound_cli/src/plugin.zig" },
         .{ .name = "inbound_fs", .path = "inbound_fs/src/plugin.zig" },

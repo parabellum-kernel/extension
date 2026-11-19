@@ -4,7 +4,6 @@ const KernelContext = parabellum.kernel.KernelContext;
 
 pub const datasource = @import("parabellum_drivers");
 pub const datasources = datasource;
-pub const artifact = @import("artifact/src/root.zig");
 pub const trace_jsonl = @import("trace_jsonl/src/root.zig");
 pub const pcapng = @import("pcapng/src/root.zig");
 pub const opentelemetry = @import("opentelemetry/src/root.zig");

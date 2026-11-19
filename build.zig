@@ -9,6 +9,26 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const sdk_mod = sdk_dep.module("parabellum_sdk");
+
+    _ = b.addModule("ext_opentelemetry", .{
+        .root_source_file = b.path("opentelemetry/src/opentelemetry.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "parabellum_sdk", .module = sdk_mod },
+        },
+    });
+    _ = b.addModule("ext_trace_jsonl", .{
+        .root_source_file = b.path("trace_jsonl/src/trace_jsonl.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "parabellum_sdk", .module = sdk_mod },
+        },
+    });
 
     const extensions = [_]struct { name: []const u8, path: []const u8 }{
         .{ .name = "dag_viz", .path = "dag_viz/src/plugin.zig" },

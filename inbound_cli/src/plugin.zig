@@ -23,23 +23,36 @@ fn cliServeArgs(
     host_dispatcher: *anyopaque,
     dispatch_fn: abi.extension.HostDispatchFn_ABI,
 ) callconv(.c) abi.HostError_ABI {
-    const req_parsed = cli.parseArgv(argv, argc) orelse {
-        cli.printStderr("Usage: parabellum-engine <command> [options]\n");
-        return .ok;
-    };
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena_state.deinit();
+    const alloc = arena_state.allocator();
 
-    var args_buf: [128]u8 = undefined;
-    const args_json = std.fmt.bufPrint(
-        &args_buf,
-        "{{\"custom\":{}}}",
-        .{req_parsed.is_custom},
-    ) catch return .out_of_memory;
+    var req_parsed = cli.parseArgv(alloc, argv, argc) catch |err| {
+        var err_buf: [256]u8 = undefined;
+        const msg = std.fmt.bufPrint(&err_buf, "CLI parse error: {s}\n", .{@errorName(err)}) catch "CLI parse error\n";
+        cli.printStderr(msg);
+        return .invalid_argument;
+    };
+    defer req_parsed.deinit(alloc);
+
+    switch (req_parsed.action) {
+        .help => {
+            const help_text = cli.cli_app.formatHelp(alloc, req_parsed.help_command) catch return .out_of_memory;
+            cli.printStdout(help_text);
+            return .ok;
+        },
+        .version => {
+            cli.printStdout(cli.cli_app.spec.name ++ " " ++ cli.cli_app.spec.version ++ "\n");
+            return .ok;
+        },
+        .run => {},
+    }
 
     const abi_req = abi.extension.InboundRequest_ABI{
         .command_or_route = abi.Slice_ABI.from(req_parsed.route),
         .pipeline_yaml_path = abi.Slice_ABI.from(req_parsed.pipeline_path),
         .payload = abi.Slice_ABI.from(req_parsed.payload),
-        .args_json = abi.Slice_ABI.from(args_json),
+        .args_json = abi.Slice_ABI.from(req_parsed.args_json),
     };
 
     var abi_resp: abi.extension.InboundResponse_ABI = .{ .status_code = 500, .body = abi.Slice_ABI.empty };

@@ -1,9 +1,7 @@
 name: Release Extension Plugins
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_dispatch:
 
 env:
   ZIG_VERSION: "0.17.1"

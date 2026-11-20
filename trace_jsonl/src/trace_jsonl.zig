@@ -1,5 +1,6 @@
 const std = @import("std");
 const sdk = @import("parabellum_sdk");
+const platform = @import("parabellum_platform");
 const abi = sdk.abi;
 
 extern "c" fn fflush(stream: *std.c.FILE) c_int;
@@ -25,6 +26,10 @@ fn ensureFileInit() void {
     trace_file_init = true;
     if (std.c.getenv("PARABELLUM_TRACE_OUT")) |path| {
         if (path[0] != 0) {
+            const p_slice = std.mem.span(path);
+            if (std.fs.path.dirname(p_slice)) |dir| {
+                platform.fs.nativeFs().mkdirAll(std.heap.c_allocator, dir) catch {};
+            }
             trace_file = std.c.fopen(path, "a");
         }
     }
@@ -88,7 +93,7 @@ fn registerTraceJsonl(
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "trace_jsonl",
-    .version = .{ .major = 2, .minor = 0, .patch = 2 },
+    .version = .{ .major = 2, .minor = 0, .patch = 3 },
     .register = registerTraceJsonl,
 });
 

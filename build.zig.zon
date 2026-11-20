@@ -10,7 +10,7 @@
         },
         .parabellum_libs = .{
             .url = "git+https://github.com/parabellum-kernel/lib.git?ref=v2.0.2#0ec9292602c2120bf47d7116cdd0de9af7c3a298",
-            .hash = "parabellum_libs-2.0.2-xPH3YwUDEQCsY88MWhI28Y9ZAAxWeOXLm2lrWtkZSZl6",
+            .hash = "parabellum_libs-2.0.2-xPH3YxsAEQBCJILEARCagCL5WiJffxFG6iedBQb3TclH",
         },
     },
     .paths = .{

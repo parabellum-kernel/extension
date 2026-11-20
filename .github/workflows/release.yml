@@ -18,7 +18,7 @@ jobs:
           - os: ubuntu-latest
             asset_suffix: linux-x86_64
             lib_ext: so
-          - os: macos-14
+          - os: macos-15
             asset_suffix: macos-aarch64
             lib_ext: dylib
     runs-on: ${{ matrix.os }}

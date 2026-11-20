@@ -3,6 +3,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const c = std.c;
+const sdk = @import("parabellum_sdk");
+const cap_router = @import("capability_router.zig");
 
 /// Which kind of payload `Request.payload` carries (mapped to the host's `InputSource`).
 pub const InputKind = enum { none, memory_bytes, job_json };
@@ -38,6 +40,9 @@ pub const Config = struct {
     listen_port: u16 = 8080,
     default_pipeline_path: []const u8 = "",
     read_timeout_ms: u32 = 30_000,
+    auth_token: []const u8 = "",
+    catalog: ?sdk.capabilities.CapabilityCatalog = null,
+    event_ring: ?*cap_router.EventRing = null,
 };
 
 /// Parses `host:port`, `:port` or `port` into a `Config` (slices borrow from `listen_address`).
@@ -154,6 +159,7 @@ pub const HttpServer = struct {
         var custom_pipe_path: ?[]const u8 = null;
         var skip_so = false;
         var hdr_range: []const u8 = "";
+        var hdr_auth: []const u8 = "";
 
         var line_it = std.mem.splitSequence(u8, headers_part, "\r\n");
         _ = line_it.next();
@@ -167,12 +173,78 @@ pub const HttpServer = struct {
                 skip_so = std.ascii.eqlIgnoreCase(h_val, "true") or std.mem.eql(u8, h_val, "1");
             } else if (std.ascii.eqlIgnoreCase(h_name, "range")) {
                 hdr_range = h_val;
+            } else if (std.ascii.eqlIgnoreCase(h_name, "authorization")) {
+                hdr_auth = h_val;
             }
         }
         const pipeline = custom_pipe_path orelse self.config.default_pipeline_path;
         const is_get = std.mem.eql(u8, method, "GET");
         const is_head = std.mem.eql(u8, method, "HEAD");
         const is_post = std.mem.eql(u8, method, "POST");
+
+        if (self.config.auth_token.len > 0 and (std.mem.startsWith(u8, path, "/api/") or std.mem.startsWith(u8, path, "/events"))) {
+            const expected_prefix = "Bearer ";
+            const ok_auth = std.mem.startsWith(u8, hdr_auth, expected_prefix) and
+                std.mem.eql(u8, hdr_auth[expected_prefix.len..], self.config.auth_token);
+            if (!ok_auth) {
+                return formatHttpResponse(allocator, 401, "Unauthorized", "{\"error\":\"unauthorized\"}\n");
+            }
+        }
+
+        if (is_get and std.mem.eql(u8, path, "/capabilities")) {
+            if (self.config.catalog) |cat| {
+                const cat_json = try sdk.capabilities.toJson(allocator, cat);
+                defer allocator.free(cat_json);
+                return formatHttpResponse(allocator, 200, "OK", cat_json);
+            }
+            return formatHttpResponse(allocator, 200, "OK", "{\"id\":\"\",\"name\":\"\",\"capabilities\":[]}\n");
+        }
+
+        if (is_get and std.mem.eql(u8, path, "/openapi.json")) {
+            if (self.config.catalog) |cat| {
+                const oa_json = try cap_router.buildOpenApiJson(allocator, cat);
+                defer allocator.free(oa_json);
+                return formatHttpResponse(allocator, 200, "OK", oa_json);
+            }
+            return formatHttpResponse(allocator, 200, "OK", "{\"openapi\":\"3.1.0\",\"paths\":{}}\n");
+        }
+
+        if (is_get and (std.mem.eql(u8, path, "/events") or std.mem.startsWith(u8, path, "/events?"))) {
+            var topics: []const u8 = "";
+            if (std.mem.indexOf(u8, path, "topics=")) |ti| {
+                const rest = path[ti + "topics=".len ..];
+                topics = if (std.mem.indexOfScalar(u8, rest, '&')) |amp| rest[0..amp] else rest;
+            }
+            const sse_body = if (self.config.event_ring) |ring|
+                try ring.drainSse(allocator, topics)
+            else
+                try allocator.dupe(u8, "");
+            defer allocator.free(sse_body);
+            return std.fmt.allocPrint(
+                allocator,
+                "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nContent-Length: {d}\r\nConnection: close\r\n\r\n{s}",
+                .{ sse_body.len, sse_body },
+            );
+        }
+
+        if ((is_get or is_post) and std.mem.startsWith(u8, path, "/api/")) {
+            if (self.config.catalog) |cat| {
+                const clean_path = if (std.mem.indexOfScalar(u8, path, '?')) |q| path[0..q] else path;
+                if (cap_router.matchCapabilityRoute(cat, clean_path)) |cap_spec| {
+                    const r = try dispatch.call(.{
+                        .route = cap_spec.id,
+                        .is_custom = true,
+                        .pipeline_path = pipeline,
+                        .payload = body,
+                        .input_kind = if (body.len > 0) .job_json else .none,
+                    });
+                    const code: u16 = if (r.ok and cap_spec.execution_mode == .async_job) 202 else r.status_code;
+                    const reason: []const u8 = if (code == 202) "Accepted" else if (r.ok) "OK" else "Bad Request";
+                    return formatHttpResponse(allocator, code, reason, r.body);
+                }
+            }
+            return formatHttpResponse(allocator, 404, "Not Found", "{\"error\":\"unknown_capability\"}\n");
+        }
 
         if (is_get and (std.mem.eql(u8, path, "/v1/health") or std.mem.eql(u8, path, "/health"))) {
             const r = try dispatch.call(.{ .route = "health", .pipeline_path = pipeline });

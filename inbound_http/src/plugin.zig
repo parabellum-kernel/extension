@@ -1,7 +1,9 @@
 const std = @import("std");
 const sdk = @import("parabellum_sdk");
+const platform = @import("parabellum_platform");
 const abi = sdk.abi;
 const http = @import("http_transport.zig");
+const cap_router = @import("capability_router.zig");
 
 /// Host dispatcher handle received through the C-ABI `serve` call.
 const HostCtx = struct {
@@ -38,6 +40,16 @@ fn abiDispatch(ctx: *anyopaque, req: http.Request) anyerror!http.Response {
 }
 
 var transport_ctx_marker: u8 = 0;
+var global_event_ring = cap_router.EventRing{};
+var global_catalog_parsed: ?std.json.Parsed(sdk.capabilities.CapabilityCatalog) = null;
+
+fn onTelemetryEvent(_: *abi.extension.SubscriberCtx_ABI, ev: *const abi.TelemetryEvent_ABI) callconv(.c) void {
+    global_event_ring.pushAbiEvent(ev);
+}
+
+const telemetry_sub_vtable = abi.TelemetrySubscriberVTable_ABI{
+    .on_event = onTelemetryEvent,
+};
 
 fn httpServe(
     _: *abi.extension.TransportCtx_ABI,
@@ -46,10 +58,15 @@ fn httpServe(
     host_dispatcher: *anyopaque,
     dispatch_fn: abi.extension.HostDispatchFn_ABI,
 ) callconv(.c) abi.HostError_ABI {
-    var server = http.HttpServer.init(
-        std.heap.c_allocator,
-        http.parseListenAddress(listen_addr.toSlice(), pipeline_path.toSlice()),
-    );
+    var cfg = http.parseListenAddress(listen_addr.toSlice(), pipeline_path.toSlice());
+    cfg.event_ring = &global_event_ring;
+    if (global_catalog_parsed) |cp| cfg.catalog = cp.value;
+    const auth_tok = platform.env.nativeEnv().getEnv(std.heap.c_allocator, "PARABELLUM_HTTP_TOKEN");
+    defer if (auth_tok) |t| std.heap.c_allocator.free(t);
+    if (auth_tok) |t| {
+        cfg.auth_token = t;
+    }
+    var server = http.HttpServer.init(std.heap.c_allocator, cfg);
     var hc = HostCtx{ .host_dispatcher = host_dispatcher, .dispatch = dispatch_fn };
     server.serveLoop(.{ .ctx = &hc, .func = abiDispatch }) catch return .io_error;
     return .ok;
@@ -63,6 +80,11 @@ const http_vtable = abi.InboundTransportVTable_ABI{
 };
 
 fn registerInboundHttp(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.KernelApiVTable_ABI) anyerror!void {
+    if (sdk.transport.inbound.fetchCapabilityCatalog(std.heap.c_allocator, kernel, api) catch null) |parsed| {
+        if (global_catalog_parsed) |*old| old.deinit();
+        global_catalog_parsed = parsed;
+    }
+    _ = api.subscribe_telemetry(kernel, @ptrCast(&transport_ctx_marker), &telemetry_sub_vtable);
     const rc = api.register_inbound_transport(
         kernel,
         "http",
@@ -74,7 +96,7 @@ fn registerInboundHttp(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_http",
-    .version = .{ .major = 2, .minor = 0, .patch = 2 },
+    .version = .{ .major = 2, .minor = 0, .patch = 3 },
     .register = registerInboundHttp,
 });
 
@@ -89,4 +111,5 @@ test "inbound_http C-ABI extension manifest" {
 
 test {
     _ = http;
+    _ = cap_router;
 }

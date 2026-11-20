@@ -10,6 +10,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const sdk_mod = sdk_dep.module("parabellum_sdk");
+    const libs_dep = b.dependency("parabellum_libs", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const platform_mod = libs_dep.module("parabellum_platform");
 
     _ = b.addModule("ext_opentelemetry", .{
         .root_source_file = b.path("opentelemetry/src/opentelemetry.zig"),
@@ -18,6 +23,7 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .imports = &.{
             .{ .name = "parabellum_sdk", .module = sdk_mod },
+            .{ .name = "parabellum_platform", .module = platform_mod },
         },
     });
     _ = b.addModule("ext_trace_jsonl", .{
@@ -27,6 +33,18 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .imports = &.{
             .{ .name = "parabellum_sdk", .module = sdk_mod },
+            .{ .name = "parabellum_platform", .module = platform_mod },
+        },
+    });
+
+    _ = b.addModule("tui_inbound", .{
+        .root_source_file = b.path("tui_inbound/src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "parabellum_sdk", .module = sdk_mod },
+            .{ .name = "parabellum_platform", .module = platform_mod },
         },
     });
 
@@ -39,6 +57,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "opentelemetry", .path = "opentelemetry/src/plugin.zig" },
         .{ .name = "pcapng", .path = "pcapng/src/plugin.zig" },
         .{ .name = "trace_jsonl", .path = "trace_jsonl/src/plugin.zig" },
+        .{ .name = "tui_inbound", .path = "tui_inbound/src/plugin.zig" },
     };
 
     const test_step = b.step("test", "Run all extension C-ABI conformance tests");
@@ -49,6 +68,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
+        ext_so.root_module.addImport("parabellum_platform", platform_mod);
         b.installArtifact(ext_so);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);

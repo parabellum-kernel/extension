@@ -2,8 +2,10 @@ const std = @import("std");
 const sdk = @import("parabellum_sdk");
 const abi = sdk.abi;
 const cli = @import("cli_transport.zig");
+const ir_cli = @import("ir_cli.zig");
 
 var transport_ctx_marker: u8 = 0;
+var global_cli_catalog: ?std.json.Parsed(sdk.capabilities.CapabilityCatalog) = null;
 
 fn cliServe(
     _: *abi.extension.TransportCtx_ABI,
@@ -27,6 +29,24 @@ fn cliServeArgs(
     defer arena_state.deinit();
     const alloc = arena_state.allocator();
 
+    if (global_cli_catalog) |cat_parsed| {
+        const slice_argv = alloc.alloc([]const u8, argc) catch return .out_of_memory;
+        for (0..argc) |idx| slice_argv[idx] = argv[idx].toSlice();
+        if (ir_cli.tryParseCapabilityArgs(alloc, cat_parsed.value, slice_argv) catch null) |cap_call| {
+            const abi_req = abi.extension.InboundRequest_ABI{
+                .command_or_route = abi.Slice_ABI.from(cap_call.capability.id),
+                .pipeline_yaml_path = abi.Slice_ABI.empty,
+                .payload = abi.Slice_ABI.from(cap_call.payload_json),
+                .args_json = abi.Slice_ABI.from("{\"custom\":true,\"input\":\"job_json\"}"),
+            };
+            var abi_resp: abi.extension.InboundResponse_ABI = .{ .status_code = 500, .body = abi.Slice_ABI.empty };
+            const rc = dispatch_fn(host_dispatcher, &abi_req, &abi_resp);
+            if (rc != .ok) return rc;
+            cli.printStdout(abi_resp.body.toSlice());
+            return .ok;
+        }
+    }
+
     var req_parsed = cli.parseArgv(alloc, argv, argc) catch |err| {
         var err_buf: [256]u8 = undefined;
         const msg = std.fmt.bufPrint(&err_buf, "CLI parse error: {s}\n", .{@errorName(err)}) catch "CLI parse error\n";
@@ -39,6 +59,12 @@ fn cliServeArgs(
         .help => {
             const help_text = cli.cli_app.formatHelp(alloc, req_parsed.help_command) catch return .out_of_memory;
             cli.printStdout(help_text);
+            if (global_cli_catalog) |cat_parsed| {
+                if (ir_cli.formatCatalogHelp(alloc, cat_parsed.value) catch null) |ir_help| {
+                    cli.printStdout("\n");
+                    cli.printStdout(ir_help);
+                }
+            }
             return .ok;
         },
         .version => {
@@ -87,14 +113,22 @@ const transport_vtable = abi.InboundTransportVTable_ABI{
 };
 
 fn registerInboundCli(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.KernelApiVTable_ABI) anyerror!void {
+    if (sdk.transport.inbound.fetchCapabilityCatalog(std.heap.c_allocator, kernel, api) catch null) |parsed| {
+        if (global_cli_catalog) |*old| old.deinit();
+        global_cli_catalog = parsed;
+    }
     const tctx: *abi.extension.TransportCtx_ABI = @ptrCast(&transport_ctx_marker);
     const rc = api.register_inbound_transport(kernel, "cli", tctx, &transport_vtable);
     if (rc != .ok) return error.TransportRegistrationFailed;
 }
 
+test {
+    _ = ir_cli;
+}
+
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_cli",
-    .version = .{ .major = 2, .minor = 0, .patch = 2 },
+    .version = .{ .major = 2, .minor = 0, .patch = 3 },
     .register = registerInboundCli,
 });
 

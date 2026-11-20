@@ -1,6 +1,7 @@
 //! Self-contained directory change watcher (depends only on `std` + libc).
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const platform = @import("parabellum_platform");
 
 pub const OnChangeFn = *const fn (ctx: *anyopaque, full_path: []const u8, file_name: []const u8) void;
 
@@ -55,7 +56,7 @@ pub const FsWatcher = struct {
     }
 
     pub fn scanOnce(self: *FsWatcher, io: std.Io, emit_events: bool, ctx: *anyopaque, on_change: ?OnChangeFn) !void {
-        std.Io.Dir.cwd().createDirPath(io, self.dir_path) catch {};
+        platform.fs.nativeFs().mkdirAll(self.allocator, self.dir_path) catch {};
         var dir = std.Io.Dir.cwd().openDir(io, self.dir_path, .{ .iterate = true }) catch return;
         defer dir.close(io);
 

@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const platform_mod = libs_dep.module("parabellum_platform");
+    const yaml_mod = libs_dep.module("parabellum_yaml");
 
     _ = b.addModule("ext_opentelemetry", .{
         .root_source_file = b.path("opentelemetry/src/opentelemetry.zig"),
@@ -47,6 +48,17 @@ pub fn build(b: *std.Build) void {
             .{ .name = "parabellum_platform", .module = platform_mod },
         },
     });
+    _ = b.addModule("yaml_config", .{
+        .root_source_file = b.path("yaml_config/src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{
+            .{ .name = "parabellum_sdk", .module = sdk_mod },
+            .{ .name = "parabellum_platform", .module = platform_mod },
+            .{ .name = "parabellum_yaml", .module = yaml_mod },
+        },
+    });
 
     const extensions = [_]struct { name: []const u8, path: []const u8 }{
         .{ .name = "dag_viz", .path = "dag_viz/src/plugin.zig" },
@@ -58,6 +70,7 @@ pub fn build(b: *std.Build) void {
         .{ .name = "pcapng", .path = "pcapng/src/plugin.zig" },
         .{ .name = "trace_jsonl", .path = "trace_jsonl/src/plugin.zig" },
         .{ .name = "tui_inbound", .path = "tui_inbound/src/plugin.zig" },
+        .{ .name = "yaml_config", .path = "yaml_config/src/plugin.zig" },
     };
 
     const test_step = b.step("test", "Run all extension C-ABI conformance tests");
@@ -69,6 +82,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         ext_so.root_module.addImport("parabellum_platform", platform_mod);
+        ext_so.root_module.addImport("parabellum_yaml", yaml_mod);
         b.installArtifact(ext_so);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);

@@ -38,6 +38,7 @@ pub const CustomPanel = struct {
     title: []const u8,
     dock: PanelDock = .right,
     visible: bool = true,
+    preferred_height: u16 = 0,
     ctx: ?*anyopaque = null,
     render: *const fn (ctx: ?*anyopaque, surface: PanelSurface, focused: bool) void,
     handle_key: ?*const fn (ctx: ?*anyopaque, key: Key, dispatcher: inbound.HostDispatcher) anyerror!bool = null,
@@ -49,7 +50,17 @@ pub const Config = struct {
     keymap: []const vtables.KeymapEntry = &.{},
     custom_renderers: []const CustomRenderer = &.{},
     extra_panels: []const CustomPanel = &.{},
+    show_sidebar: bool = true,
+    show_menubar: bool = true,
+    form_on_demand: bool = false,
     show_logs: bool = true,
+    logs_visible: bool = true,
+    on_start: ?*const fn (ctx: ?*anyopaque, app: *TuiApp, dispatcher: inbound.HostDispatcher) void = null,
+    on_start_ctx: ?*anyopaque = null,
+    on_tick: ?*const fn (ctx: ?*anyopaque, app: *TuiApp, dispatcher: inbound.HostDispatcher) void = null,
+    on_tick_ctx: ?*anyopaque = null,
+    on_capability_complete: ?*const fn (ctx: ?*anyopaque, app: *TuiApp, cap_id: []const u8, status_code: i32, dispatcher: inbound.HostDispatcher) void = null,
+    on_capability_complete_ctx: ?*anyopaque = null,
 };
 
 pub const PanelKind = enum {
@@ -66,6 +77,8 @@ pub const PanelEntry = struct {
     dock: PanelDock,
     kind: PanelKind,
     visible: bool = true,
+    collapsed: bool = false,
+    preferred_height: u16 = 0,
     custom: ?CustomPanel = null,
 };
 
@@ -99,6 +112,7 @@ pub const TuiApp = struct {
     should_quit: bool = false,
 
     nav_history: std.ArrayList(HistoryEntry) = .empty,
+    menubar_focused: bool = false,
 
     palette_query: std.ArrayList(u8) = .empty,
     action_choices: [8]cap.ActionLink = undefined,
@@ -126,23 +140,57 @@ pub const TuiApp = struct {
             .state = try CatalogState.init(alloc, catalog),
             .ring = ring,
         };
+        if (config.show_sidebar) {
+            try app.panels.append(alloc, .{ .id = "capabilities", .title = "Capabilities", .dock = .left, .kind = .sidebar, .visible = true });
+        } else {
+            for (config.extra_panels) |ep| {
+                if (ep.dock == .left) {
+                    try app.panels.append(alloc, .{
+                        .id = ep.id,
+                        .title = ep.title,
+                        .dock = ep.dock,
+                        .kind = .custom,
+                        .visible = ep.visible,
+                        .preferred_height = ep.preferred_height,
+                        .custom = ep,
+                    });
+                }
+            }
+        }
         try app.panels.appendSlice(alloc, &.{
-            .{ .id = "capabilities", .title = "Capabilities", .dock = .left, .kind = .sidebar, .visible = true },
-            .{ .id = "form", .title = "Form", .dock = .main_top, .kind = .form, .visible = true },
+            .{ .id = "form", .title = "Form", .dock = .main_top, .kind = .form, .visible = !config.form_on_demand },
             .{ .id = "output", .title = "Output", .dock = .main_bottom, .kind = .output, .visible = true },
-            .{ .id = "logs", .title = "Telemetry Logs", .dock = .bottom, .kind = .logs, .visible = config.show_logs },
         });
+        if (config.show_logs) {
+            try app.panels.append(alloc, .{
+                .id = "logs",
+                .title = "Telemetry Logs",
+                .dock = .bottom,
+                .kind = .logs,
+                .visible = true,
+                .collapsed = !config.logs_visible,
+            });
+        }
         for (config.extra_panels) |ep| {
+            if (!config.show_sidebar and ep.dock == .left) continue;
             try app.panels.append(alloc, .{
                 .id = ep.id,
                 .title = ep.title,
                 .dock = ep.dock,
                 .kind = .custom,
                 .visible = ep.visible,
+                .preferred_height = ep.preferred_height,
                 .custom = ep,
             });
         }
-        app.setStatus("Ready. 1-9: focus panel | z: zoom | Alt+1-9: hide/show | ?: help | F5: run | q: quit");
+        // Focus the first visible panel
+        for (app.panels.items, 0..) |p, idx| {
+            if (p.visible) {
+                app.focus_idx = idx;
+                break;
+            }
+        }
+        app.setStatus("Ready. m:Menu | 1-9:Focus | z:Zoom | a:Actions | F5:Run | ?:Help | q:Quit");
         return app;
     }
 
@@ -199,18 +247,102 @@ pub const TuiApp = struct {
         try self.executeActiveCapability(dispatcher);
     }
 
-    fn focusedPanelKind(self: *const TuiApp) PanelKind {
+    pub fn focusedPanelKind(self: *const TuiApp) PanelKind {
         if (self.focus_idx < self.panels.items.len) {
             return self.panels.items[self.focus_idx].kind;
         }
         return .sidebar;
     }
 
-    fn focusKind(self: *TuiApp, kind: PanelKind) void {
-        for (self.panels.items, 0..) |p, idx| {
-            if (p.kind == kind and p.visible) {
+    pub fn hideFormPanel(self: *TuiApp) void {
+        if (!self.form_on_demand()) return;
+        for (self.panels.items) |*p| {
+            if (p.kind == .form) {
+                p.visible = false;
+                return;
+            }
+        }
+    }
+
+    fn form_on_demand(self: *const TuiApp) bool {
+        return self.config.form_on_demand;
+    }
+
+    pub fn setPanelVisible(self: *TuiApp, id: []const u8, visible: bool) void {
+        for (self.panels.items) |*p| {
+            if (std.mem.eql(u8, p.id, id)) {
+                p.visible = visible;
+                return;
+            }
+        }
+    }
+
+    pub fn focusPanelById(self: *TuiApp, id: []const u8) void {
+        for (self.panels.items, 0..) |*p, idx| {
+            if (std.mem.eql(u8, p.id, id)) {
+                p.visible = true;
                 self.focus_idx = idx;
                 return;
+            }
+        }
+    }
+
+    pub fn openCapabilityForm(
+        self: *TuiApp,
+        cap_id: []const u8,
+        prefill: []const struct { name: []const u8, value: []const u8 },
+    ) !void {
+        if (!try self.state.selectCapabilityById(cap_id)) return;
+        for (prefill) |kv| {
+            for (self.state.form_fields.items) |*f| {
+                if (std.mem.eql(u8, f.spec.name, kv.name)) {
+                    try f.setValue(self.alloc, kv.value);
+                }
+            }
+        }
+        self.focusKind(.form);
+    }
+
+    pub fn dispatchCapabilityToOutput(
+        self: *TuiApp,
+        cap_id: []const u8,
+        payload_json: []const u8,
+        dispatcher: inbound.HostDispatcher,
+    ) !void {
+        if (!try self.state.selectCapabilityById(cap_id)) return;
+        const spec = self.state.activeCapability() orelse return;
+        self.setStatusFmt("Running {s}...", .{spec.id});
+        const resp = dispatcher.dispatch(.{
+            .command_or_route = spec.id,
+            .payload = payload_json,
+            .args_json = "{\"custom\":true,\"input\":\"job_json\"}",
+        }) catch |err| {
+            self.setStatusFmt("Dispatch error: {s}", .{@errorName(err)});
+            return;
+        };
+
+        if (self.raw_last_body.len > 0) self.alloc.free(self.raw_last_body);
+        self.raw_last_body = try self.alloc.dupe(u8, resp.body);
+        try self.state.result.loadResponse(spec, resp.status_code, resp.body);
+        self.table_sort_next_col = 0;
+        self.setStatusFmt("{s} -> HTTP {d}", .{ spec.id, resp.status_code });
+        if (resp.status_code >= 200 and resp.status_code < 300) {
+            self.hideFormPanel();
+            self.focusKind(.output);
+        }
+        if (self.config.on_capability_complete) |cb| {
+            cb(self.config.on_capability_complete_ctx, self, spec.id, resp.status_code, dispatcher);
+        }
+    }
+
+    fn focusKind(self: *TuiApp, kind: PanelKind) void {
+        for (self.panels.items, 0..) |*p, idx| {
+            if (p.kind == kind) {
+                if (p.visible or kind == .form) {
+                    p.visible = true;
+                    self.focus_idx = idx;
+                    return;
+                }
             }
         }
     }
@@ -235,7 +367,7 @@ pub const TuiApp = struct {
         self.status_len = n;
     }
 
-    fn setStatusFmt(self: *TuiApp, comptime fmt: []const u8, args: anytype) void {
+    pub fn setStatusFmt(self: *TuiApp, comptime fmt: []const u8, args: anytype) void {
         const s = std.fmt.bufPrint(&self.status_msg, fmt, args) catch "Status";
         self.status_len = s.len;
     }
@@ -272,7 +404,15 @@ pub const TuiApp = struct {
         var in_buf: [256]u8 = undefined;
         var pending_len: usize = 0;
 
+        self.runStartupCapabilities(dispatcher);
+        if (self.config.on_start) |cb| {
+            cb(self.config.on_start_ctx, self, dispatcher);
+        }
+
         while (!self.should_quit) {
+            if (self.config.on_tick) |cb| {
+                cb(self.config.on_tick_ctx, self, dispatcher);
+            }
             const sz = tty.getSize();
             try screen.resize(sz.w, sz.h);
             self.render(&screen);
@@ -341,6 +481,53 @@ pub const TuiApp = struct {
             .none => {},
         }
 
+        // Menubar focus mode
+        if (self.menubar_focused) {
+            switch (key) {
+                .escape => {
+                    self.menubar_focused = false;
+                    self.setStatus("Menu closed");
+                    return;
+                },
+                .left, .back_tab => {
+                    self.moveSidebar(-1);
+                    return;
+                },
+                .right, .tab => {
+                    self.moveSidebar(1);
+                    return;
+                },
+                .enter => {
+                    self.menubar_focused = false;
+                    if (self.state.selected_sidebar < self.state.sidebar_items.items.len) {
+                        const it = self.state.sidebar_items.items[self.state.selected_sidebar];
+                        if (!it.is_group) {
+                            try self.state.selectCapability(it.cap_index);
+                            if (self.state.form_fields.items.len == 0) {
+                                try self.executeActiveCapability(dispatcher);
+                            } else {
+                                self.focusKind(.form);
+                            }
+                        }
+                    }
+                    return;
+                },
+                .char => |cp| {
+                    if (cp == 'h') {
+                        self.moveSidebar(-1);
+                        return;
+                    } else if (cp == 'l') {
+                        self.moveSidebar(1);
+                        return;
+                    } else if (cp == 'm' or cp == 'q') {
+                        self.menubar_focused = false;
+                        return;
+                    }
+                },
+                else => {},
+            }
+        }
+
         // Global shortcuts
         switch (key) {
             .tab => {
@@ -356,9 +543,20 @@ pub const TuiApp = struct {
                 return;
             },
             .ctrl_l => {
-                for (self.panels.items, 0..) |p, idx| {
+                for (self.panels.items, 0..) |*p, idx| {
                     if (p.kind == .logs) {
-                        self.togglePanelAt(idx);
+                        if (!p.visible) {
+                            p.visible = true;
+                            p.collapsed = false;
+                            self.focus_idx = idx;
+                        } else {
+                            p.collapsed = !p.collapsed;
+                            if (!p.collapsed) {
+                                self.focus_idx = idx;
+                            } else if (self.focus_idx == idx) {
+                                self.cycleFocus(1);
+                            }
+                        }
                         break;
                     }
                 }
@@ -383,6 +581,11 @@ pub const TuiApp = struct {
                         self.should_quit = true;
                         return;
                     }
+                    if (cp == 'm') {
+                        self.menubar_focused = !self.menubar_focused;
+                        self.setStatus(if (self.menubar_focused) "Menubar: Left/Right to choose, Enter to select, Esc to close" else "Menu closed");
+                        return;
+                    }
                     if (cp == '?') {
                         self.modal = .help;
                         return;
@@ -400,6 +603,7 @@ pub const TuiApp = struct {
                         const idx: usize = @intCast(cp - '1');
                         if (idx < self.panels.items.len) {
                             self.panels.items[idx].visible = true;
+                            self.panels.items[idx].collapsed = false;
                             self.focus_idx = idx;
                             return;
                         }
@@ -538,16 +742,23 @@ pub const TuiApp = struct {
     fn handleFormKey(self: *TuiApp, key: Key, dispatcher: inbound.HostDispatcher) !void {
         const total_rows = self.state.form_fields.items.len + 1; // +1 for Run button
         switch (key) {
+            .escape => {
+                self.hideFormPanel();
+                self.focusKind(.output);
+                self.setStatus("Form closed");
+            },
             .up => {
                 if (self.state.active_field_idx > 0) self.state.active_field_idx -= 1;
             },
             .down => {
+                try self.maybePrefillNameFromFilePath(self.state.active_field_idx);
                 if (self.state.active_field_idx + 1 < total_rows) self.state.active_field_idx += 1;
             },
             .enter => {
                 if (self.state.active_field_idx >= self.state.form_fields.items.len) {
                     try self.executeActiveCapability(dispatcher);
                 } else {
+                    try self.maybePrefillNameFromFilePath(self.state.active_field_idx);
                     const f = &self.state.form_fields.items[self.state.active_field_idx];
                     if (f.spec.field_type == .bool) {
                         f.toggleBool();
@@ -575,6 +786,7 @@ pub const TuiApp = struct {
                         if (n > 0) {
                             self.path_complete_cycle += 1;
                             self.setStatusFmt("Path matches: {d} (Right: next)", .{n});
+                            try self.maybePrefillNameFromFilePath(self.state.active_field_idx);
                         } else {
                             self.setStatus("No matching path");
                         }
@@ -601,6 +813,22 @@ pub const TuiApp = struct {
                 }
             },
             else => {},
+        }
+    }
+
+    fn maybePrefillNameFromFilePath(self: *TuiApp, field_idx: usize) !void {
+        if (field_idx >= self.state.form_fields.items.len) return;
+        const src = &self.state.form_fields.items[field_idx];
+        if (src.spec.field_type != .file_path) return;
+        const val = src.buf.items;
+        if (val.len == 0 or val[val.len - 1] == '/') return;
+        const base = std.fs.path.basename(val);
+        if (base.len == 0) return;
+        for (self.state.form_fields.items) |*dst| {
+            if (dst.spec.field_type == .text and std.mem.eql(u8, dst.spec.name, "name") and dst.buf.items.len == 0) {
+                try dst.setValue(self.alloc, base);
+                break;
+            }
         }
     }
 
@@ -727,6 +955,17 @@ pub const TuiApp = struct {
         }
     }
 
+    pub fn runStartupCapabilities(self: *TuiApp, dispatcher: inbound.HostDispatcher) void {
+        for (self.state.catalog.capabilities) |spec| {
+            if (!CatalogState.isAutorunInTui(spec)) continue;
+            _ = self.state.selectCapabilityById(spec.id) catch return;
+            self.executeActiveCapability(dispatcher) catch |err| {
+                self.setStatusFmt("Autorun {s} failed: {s}", .{ spec.id, @errorName(err) });
+            };
+            return;
+        }
+    }
+
     pub fn executeActiveCapability(self: *TuiApp, dispatcher: inbound.HostDispatcher) !void {
         const spec = self.state.activeCapability() orelse return;
         if (!self.state.validateForm()) {
@@ -768,7 +1007,11 @@ pub const TuiApp = struct {
         self.table_sort_next_col = 0;
         self.setStatusFmt("{s} -> HTTP {d}", .{ spec.id, resp.status_code });
         if (resp.status_code >= 200 and resp.status_code < 300) {
+            self.hideFormPanel();
             self.focusKind(.output);
+        }
+        if (self.config.on_capability_complete) |cb| {
+            cb(self.config.on_capability_complete_ctx, self, spec.id, resp.status_code, dispatcher);
         }
     }
 
@@ -788,17 +1031,21 @@ pub const TuiApp = struct {
         var hbuf: [128]u8 = undefined;
         const htext = std.fmt.bufPrint(&hbuf, " {s} v{s} ", .{ app_title, self.state.catalog.version }) catch " Parabellum TUI ";
         screen.drawText(0, 0, w, htext, header_style);
-        const hint = "1-9:Focus  z:Zoom  Alt+1-9:Toggle  F5:Run  ?:Help  q:Quit ";
+        const hint = "m:Menu  1-9:Focus  z:Zoom  F5:Run  ?:Help  q:Quit ";
         if (w > hint.len + htext.len) {
             screen.drawText(w - @as(u16, @intCast(hint.len)), 0, @intCast(hint.len), hint, header_style);
         }
+
+        // 1b. Capabilities Menubar (row 1)
+        self.renderMenubar(screen, 0, 1, w);
 
         // 2. Footer status bar (row h - 1)
         const footer_style = Style{ .fg = .white, .bg = .bright_black };
         screen.fillRect(0, h - 1, w, 1, ' ', footer_style);
         screen.drawText(1, h - 1, w - 2, self.statusSlice(), footer_style);
 
-        const body_h = h - 2;
+        const body_y: u16 = 2;
+        const body_h = h - 3;
         const left_count = self.countVisibleInDock(.left);
         const top_count = self.countVisibleInDock(.main_top);
         const bot_count = self.countVisibleInDock(.main_bottom);
@@ -806,10 +1053,13 @@ pub const TuiApp = struct {
         const bottom_count = self.countVisibleInDock(.bottom);
 
         const has_main = left_count + top_count + bot_count + right_count > 0;
+        const bottom_all_collapsed = self.allCollapsedInDock(.bottom);
         const bottom_h: u16 = if (bottom_count == 0)
             0
         else if (!has_main)
             body_h
+        else if (bottom_all_collapsed and body_h >= 6)
+            3
         else if (body_h >= 12)
             @max(5, body_h / 4)
         else
@@ -835,7 +1085,7 @@ pub const TuiApp = struct {
             const center_w = w - left_w - right_col_w;
 
             if (left_w > 0) {
-                self.renderDockVertical(screen, .left, 0, 1, left_w, main_h);
+                self.renderDockVertical(screen, .left, 0, body_y, left_w, main_h);
             }
             if (center_w > 0 and has_center) {
                 const top_h: u16 = if (top_count == 0)
@@ -847,17 +1097,17 @@ pub const TuiApp = struct {
                 else
                     @min(main_h / 2, @as(u16, @intCast(self.state.form_fields.items.len + 4)) * @as(u16, @intCast(top_count)));
                 const bot_h = main_h - top_h;
-                if (top_h > 0) self.renderDockVertical(screen, .main_top, left_w, 1, center_w, top_h);
-                if (bot_h > 0) self.renderDockVertical(screen, .main_bottom, left_w, 1 + top_h, center_w, bot_h);
+                if (top_h > 0) self.renderDockVertical(screen, .main_top, left_w, body_y, center_w, top_h);
+                if (bot_h > 0) self.renderDockVertical(screen, .main_bottom, left_w, body_y + top_h, center_w, bot_h);
             }
             if (right_col_w > 0) {
-                self.renderDockVertical(screen, .right, left_w + center_w, 1, right_col_w, main_h);
+                self.renderDockVertical(screen, .right, left_w + center_w, body_y, right_col_w, main_h);
             }
         }
 
         // 5. Bottom dock (Telemetry Logs + any custom bottom panels)
         if (bottom_h > 0) {
-            self.renderDockHorizontal(screen, .bottom, 0, 1 + main_h, w, bottom_h);
+            self.renderDockHorizontal(screen, .bottom, 0, body_y + main_h, w, bottom_h);
         }
 
         // 6. Modals
@@ -877,16 +1127,50 @@ pub const TuiApp = struct {
         return n;
     }
 
+    fn allCollapsedInDock(self: *const TuiApp, dock: PanelDock) bool {
+        var any = false;
+        for (self.panels.items) |p| {
+            if (p.visible and p.dock == dock) {
+                any = true;
+                if (!p.collapsed) return false;
+            }
+        }
+        return any;
+    }
+
     fn renderDockVertical(self: *TuiApp, screen: *Screen, dock: PanelDock, x: u16, y: u16, w: u16, h: u16) void {
         const count = self.countVisibleInDock(dock);
         if (count == 0 or w == 0 or h == 0) return;
-        const base_h = h / @as(u16, @intCast(count));
+
+        var fixed_total: u16 = 0;
+        var flex_count: usize = 0;
+        for (self.panels.items) |p| {
+            if (!p.visible or p.dock != dock) continue;
+            if (p.preferred_height > 0) {
+                fixed_total +|= p.preferred_height;
+            } else {
+                flex_count += 1;
+            }
+        }
+
+        const min_flex: u16 = @intCast(flex_count * 3);
+        const can_use_preferred = (flex_count > 0) and (h >= fixed_total + min_flex);
+        const flex_h: u16 = if (flex_count > 0 and can_use_preferred)
+            (h - fixed_total) / @as(u16, @intCast(flex_count))
+        else
+            h / @as(u16, @intCast(count));
+
         var cur_y = y;
         var seen: usize = 0;
         for (self.panels.items, 0..) |p, idx| {
             if (!p.visible or p.dock != dock) continue;
             seen += 1;
-            const ph = if (seen == count) (y + h) - cur_y else base_h;
+            const ph: u16 = if (seen == count)
+                (y + h) - cur_y
+            else if (can_use_preferred and p.preferred_height > 0)
+                p.preferred_height
+            else
+                flex_h;
             self.renderPanel(idx, screen, x, cur_y, w, ph);
             cur_y += ph;
         }
@@ -932,6 +1216,43 @@ pub const TuiApp = struct {
                     }
                 }
             },
+        }
+    }
+
+    fn renderMenubar(self: *const TuiApp, screen: *Screen, x: u16, y: u16, w: u16) void {
+        const bar_bg: term.Color = if (self.menubar_focused) .blue else .bright_black;
+        const bar_style = Style{ .fg = .white, .bg = bar_bg };
+        screen.fillRect(x, y, w, 1, ' ', bar_style);
+
+        const prefix = if (self.menubar_focused) " [MENU] " else " Menu: ";
+        screen.drawText(x, y, w, prefix, .{ .fg = .yellow, .bg = bar_bg, .bold = true });
+        var cx: u16 = x + @as(u16, @intCast(@min(w, prefix.len)));
+
+        const items = self.state.sidebar_items.items;
+        for (items, 0..) |it, idx| {
+            if (cx + 2 >= x + w) break;
+            if (it.is_group) {
+                if (cx > x + prefix.len) {
+                    screen.drawText(cx, y, (x + w) - cx, "│ ", .{ .fg = .white, .bg = bar_bg, .dim = true });
+                    cx += 2;
+                }
+                continue;
+            }
+            const spec = self.state.catalog.capabilities[it.cap_index];
+            const label = spec.title orelse spec.id;
+            const selected = idx == self.state.selected_sidebar;
+            const active = self.state.active_cap_idx != null and self.state.active_cap_idx.? == it.cap_index;
+            const st = Style{
+                .fg = if (self.menubar_focused and selected) .black else if (active) .bright_green else .white,
+                .bg = if (self.menubar_focused and selected) .cyan else bar_bg,
+                .bold = active or (self.menubar_focused and selected),
+            };
+            var lbuf: [48]u8 = undefined;
+            const item_txt = std.fmt.bufPrint(&lbuf, " {s} ", .{label}) catch label;
+            const avail = (x + w) - cx;
+            const draw_len: u16 = @intCast(@min(avail, item_txt.len));
+            screen.drawText(cx, y, draw_len, item_txt[0..draw_len], st);
+            cx += draw_len;
         }
     }
 
@@ -1130,6 +1451,16 @@ pub const TuiApp = struct {
             screen.drawBox(x, y, w, h, panel_title, focused, .{});
             return;
         }
+        const stats = self.ring.stats();
+        if (h == 3) {
+            var ctitle_buf: [112]u8 = undefined;
+            const ctitle = std.fmt.bufPrint(&ctitle_buf, "{s} (minimized)", .{panel_title}) catch panel_title;
+            screen.drawBox(x, y, w, h, ctitle, focused, .{});
+            var cmsg_buf: [128]u8 = undefined;
+            const cmsg = std.fmt.bufPrint(&cmsg_buf, "Press Ctrl+L or panel number to expand | {d} events (dropped: {d})", .{ stats.total, stats.dropped }) catch "Minimized";
+            screen.drawText(x + 1, y + 1, w - 2, cmsg, .{ .dim = true });
+            return;
+        }
         const ih = h - 2;
         const iw = w - 2;
 
@@ -1142,7 +1473,6 @@ pub const TuiApp = struct {
         const end = total -| self.logs_scroll_from_bottom;
         const start = end -| ih;
 
-        const stats = self.ring.stats();
         var tbuf: [112]u8 = undefined;
         const mode = if (self.logs_only_job_ui) "job/ui" else "all";
         const title = if (self.logs_scroll_from_bottom > 0)
@@ -1182,6 +1512,7 @@ pub const TuiApp = struct {
         const my: u16 = (screen.height - mh) / 2;
         screen.drawBox(mx, my, mw, mh, "Keybindings (? to close)", true, .{ .bg = .black });
         const lines = [_][]const u8{
+            "m               : Toggle Capabilities Menubar",
             "1-9 / Tab       : Focus panel directly / cycle",
             "z / Alt+1-9     : Zoom active panel / toggle panel",
             "Up / Down       : Navigate / scroll logs",
@@ -1353,4 +1684,117 @@ test "TuiApp supports extensible custom panels via Config.extra_panels" {
     // Toggle 5th panel off with Alt+5
     try app.handleKey(.{ .alt_char = '5' }, dispatcher);
     try std.testing.expect(!app.panels.items[4].visible);
+}
+
+test "TuiApp runStartupCapabilities executes capability marked with tui.autorun" {
+    const alloc = std.testing.allocator;
+    const autorun_hints = [_]cap.KeyValue{.{ .key = "tui.autorun", .value = "true" }};
+    const catalog = cap.CapabilityCatalog{
+        .id = "test_autorun",
+        .name = "TestAutorun",
+        .version = "1.0.0",
+        .capabilities = &.{
+            .{
+                .id = "other",
+                .group = "vfs",
+                .title = "Other",
+                .output = .{ .kind = .record },
+            },
+            .{
+                .id = "ls",
+                .group = "vfs",
+                .title = "List Directory",
+                .output = .{ .kind = .table },
+                .hints = &autorun_hints,
+            },
+        },
+    };
+
+    const MockHost = struct {
+        fn dispatch(_: *anyopaque, req: *const abi.InboundRequest_ABI, out_resp: *abi.InboundResponse_ABI) callconv(.c) abi.HostError_ABI {
+            if (std.mem.eql(u8, req.command_or_route.toSlice(), "ls")) {
+                out_resp.* = .{
+                    .status_code = 200,
+                    .body = abi.Slice_ABI.from("[{\"name\":\"official\"},{\"name\":\"archives\"}]"),
+                };
+            } else {
+                out_resp.* = .{
+                    .status_code = 404,
+                    .body = abi.Slice_ABI.from("{}"),
+                };
+            }
+            return .ok;
+        }
+    };
+
+    var dummy_ctx: u8 = 0;
+    const dispatcher = inbound.HostDispatcher{
+        .ptr = @ptrCast(&dummy_ctx),
+        .dispatch_fn = MockHost.dispatch,
+    };
+
+    var ring = EventRing{};
+    var app = try TuiApp.init(alloc, catalog, &ring, .{});
+    defer app.deinit();
+
+    app.runStartupCapabilities(dispatcher);
+    try std.testing.expectEqualStrings("ls", app.state.activeCapability().?.id);
+    try std.testing.expectEqual(ResultKind.table, app.state.result.kind);
+    try std.testing.expectEqual(@as(usize, 2), app.state.result.table_rows.len);
+    try std.testing.expectEqual(PanelKind.output, app.focusedPanelKind());
+    try std.testing.expectEqualStrings("ls -> HTTP 200", app.statusSlice());
+}
+
+test "TuiApp framework Config supports show_sidebar=false, form_on_demand=true, and dispatchCapabilityToOutput" {
+    const alloc = std.testing.allocator;
+    const catalog = cap.CapabilityCatalog{
+        .id = "test_fw",
+        .name = "TestFW",
+        .version = "1.0.0",
+        .capabilities = &.{
+            .{
+                .id = "preview",
+                .group = "view",
+                .title = "Preview",
+                .output = .{ .kind = .document, .mime_field = "mime_type" },
+                .inputs = &.{.{ .name = "id", .required = true }},
+            },
+        },
+    };
+
+    const MockHost = struct {
+        fn dispatch(_: *anyopaque, _: *const abi.InboundRequest_ABI, out_resp: *abi.InboundResponse_ABI) callconv(.c) abi.HostError_ABI {
+            out_resp.* = .{
+                .status_code = 200,
+                .body = abi.Slice_ABI.from("{\"mime_type\":\"text/plain\",\"data\":\"hello\"}"),
+            };
+            return .ok;
+        }
+    };
+
+    var dummy_ctx: u8 = 0;
+    const dispatcher = inbound.HostDispatcher{
+        .ptr = @ptrCast(&dummy_ctx),
+        .dispatch_fn = MockHost.dispatch,
+    };
+
+    var ring = EventRing{};
+    var app = try TuiApp.init(alloc, catalog, &ring, .{
+        .show_sidebar = false,
+        .form_on_demand = true,
+    });
+    defer app.deinit();
+
+    try std.testing.expectEqual(@as(usize, 3), app.panels.items.len);
+    try std.testing.expect(!app.panels.items[0].visible);
+    try std.testing.expectEqual(PanelKind.output, app.focusedPanelKind());
+
+    try app.openCapabilityForm("preview", &.{.{ .name = "id", .value = "f1" }});
+    try std.testing.expect(app.panels.items[0].visible);
+    try std.testing.expectEqual(PanelKind.form, app.focusedPanelKind());
+
+    try app.dispatchCapabilityToOutput("preview", "{\"id\":\"f1\"}", dispatcher);
+    try std.testing.expect(!app.panels.items[0].visible);
+    try std.testing.expectEqual(PanelKind.output, app.focusedPanelKind());
+    try std.testing.expectEqual(ResultKind.document, app.state.result.kind);
 }

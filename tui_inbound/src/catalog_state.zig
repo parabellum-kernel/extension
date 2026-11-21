@@ -773,15 +773,23 @@ pub const CatalogState = struct {
         return false;
     }
 
-    fn isHiddenInTui(spec: cap.CapabilitySpec) bool {
+    fn hasBoolHint(spec: cap.CapabilitySpec, key: []const u8) bool {
         for (spec.hints) |kv| {
-            if (std.mem.eql(u8, kv.key, "tui.hidden") and
+            if (std.mem.eql(u8, kv.key, key) and
                 (std.mem.eql(u8, kv.value, "true") or std.mem.eql(u8, kv.value, "1")))
             {
                 return true;
             }
         }
         return false;
+    }
+
+    pub fn isHiddenInTui(spec: cap.CapabilitySpec) bool {
+        return hasBoolHint(spec, "tui.hidden");
+    }
+
+    pub fn isAutorunInTui(spec: cap.CapabilitySpec) bool {
+        return hasBoolHint(spec, "tui.autorun");
     }
 
     fn matchesFilter(spec: cap.CapabilitySpec, filter: []const u8) bool {
@@ -858,12 +866,24 @@ pub const CatalogState = struct {
 
     /// Resolves matching `ActionLink`s from the active capability against the selected output item.
     pub fn matchingActions(self: *const CatalogState, out: []cap.ActionLink) usize {
-        const spec = self.activeCapability() orelse return 0;
+        return self.matchingActionsFor(&self.result, self.active_cap_idx, out);
+    }
+
+    /// Resolves matching `ActionLink`s from a specific capability against a given `ResultView`.
+    pub fn matchingActionsFor(
+        self: *const CatalogState,
+        res: *const ResultView,
+        cap_idx_opt: ?usize,
+        out: []cap.ActionLink,
+    ) usize {
+        const idx = cap_idx_opt orelse return 0;
+        if (idx >= self.catalog.capabilities.len) return 0;
+        const spec = self.catalog.capabilities[idx];
         var n: usize = 0;
         for (spec.actions) |act| {
             if (n >= out.len) break;
             if (act.condition_field) |cf| {
-                const val = self.result.selectedFieldValue(cf) orelse continue;
+                const val = res.selectedFieldValue(cf) orelse continue;
                 if (act.condition_equals) |eq| {
                     if (!std.mem.eql(u8, val, eq)) continue;
                 }
@@ -876,12 +896,17 @@ pub const CatalogState = struct {
 
     /// Applies an `ActionLink`: switches to `act.capability_id` and populates mapped inputs.
     pub fn applyActionLink(self: *CatalogState, act: cap.ActionLink) !bool {
+        return try self.applyActionLinkFrom(&self.result, act);
+    }
+
+    /// Applies an `ActionLink` reading source fields from `res`.
+    pub fn applyActionLinkFrom(self: *CatalogState, res: *const ResultView, act: cap.ActionLink) !bool {
         // Capture mapped values before switching capability/result
         var mapped_vals: [16]struct { name: []const u8, val: []const u8 } = undefined;
         var mcount: usize = 0;
         for (act.param_map) |pm| {
             if (mcount >= mapped_vals.len) break;
-            if (self.result.selectedFieldValue(pm.source_field)) |v| {
+            if (res.selectedFieldValue(pm.source_field)) |v| {
                 mapped_vals[mcount] = .{ .name = pm.target_input, .val = v };
                 mcount += 1;
             }

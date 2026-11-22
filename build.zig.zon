@@ -15,6 +15,7 @@
         "build.zig",
         "build.zig.zon",
         "artifact",
+        "authentication",
         "dag_viz",
         "inbound_cli",
         "inbound_fs",

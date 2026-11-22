@@ -16,6 +16,9 @@ pub fn build(b: *std.Build) void {
     });
     const platform_mod = libs_dep.module("parabellum_platform");
     const yaml_mod = libs_dep.module("parabellum_yaml");
+    const crypto_mod = libs_dep.module("parabellum_crypto");
+    const otp_mod = libs_dep.module("otp");
+    const mfa_mod = libs_dep.module("parabellum_mfa");
 
     _ = b.addModule("ext_opentelemetry", .{
         .root_source_file = b.path("opentelemetry/src/opentelemetry.zig"),
@@ -61,6 +64,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const extensions = [_]struct { name: []const u8, path: []const u8 }{
+        .{ .name = "authentication", .path = "authentication/src/plugin.zig" },
         .{ .name = "dag_viz", .path = "dag_viz/src/plugin.zig" },
         .{ .name = "inbound_cli", .path = "inbound_cli/src/plugin.zig" },
         .{ .name = "inbound_fs", .path = "inbound_fs/src/plugin.zig" },
@@ -83,6 +87,9 @@ pub fn build(b: *std.Build) void {
         });
         ext_so.root_module.addImport("parabellum_platform", platform_mod);
         ext_so.root_module.addImport("parabellum_yaml", yaml_mod);
+        ext_so.root_module.addImport("parabellum_crypto", crypto_mod);
+        ext_so.root_module.addImport("otp", otp_mod);
+        ext_so.root_module.addImport("parabellum_mfa", mfa_mod);
         b.installArtifact(ext_so);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);

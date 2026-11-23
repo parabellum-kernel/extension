@@ -226,6 +226,8 @@ fn emitStep(
                 const schema_r = if (oe.value.get("schema")) |s| s.asScalar() else null;
                 const filter_s = if (oe.value.get("filter")) |fl| fl.asScalar() else null;
                 const retain_b = if (oe.value.get("retain")) |rt| (if (rt.asScalar()) |rs| parseBool(rs) else false) else false;
+                const app_p = if (oe.value.get("append")) |an| try parseConfigParams(alloc, env, an) else &.{};
+                const rem_l = if (oe.value.get("remove")) |rn| try parseSliceList(alloc, env, rn) else &.{};
                 try outputs.append(alloc, .{
                     .name = abi.Slice_ABI.from(oe.key),
                     .from_field = if (from_f) |ff| abi.Slice_ABI.from(try interp(alloc, env, ff)) else abi.Slice_ABI.empty,
@@ -233,6 +235,10 @@ fn emitStep(
                     .datasource = abi.Slice_ABI.from(try interp(alloc, env, ds)),
                     .filter = if (filter_s) |fs| abi.Slice_ABI.from(try interp(alloc, env, fs)) else abi.Slice_ABI.empty,
                     .retain = retain_b,
+                    .append_ptr = if (app_p.len > 0) app_p.ptr else (&[_]abi.ConfigParam_ABI{}).ptr,
+                    .append_len = app_p.len,
+                    .remove_ptr = if (rem_l.len > 0) rem_l.ptr else (&[_]abi.Slice_ABI{}).ptr,
+                    .remove_len = rem_l.len,
                 });
             }
         } else if (out_n.asSeq()) |out_seq| {

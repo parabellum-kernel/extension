@@ -431,10 +431,17 @@ pub const TuiApp = struct {
                 &stderr_buf,
             );
             if (poll_res.stderr_len > 0) {
+                if (tty.saved_stderr_fd) |saved_fd| {
+                    if (std.c.isatty(saved_fd) == 0) {
+                        _ = std.c.write(saved_fd, stderr_buf[0..poll_res.stderr_len].ptr, poll_res.stderr_len);
+                    }
+                }
                 var it = std.mem.splitScalar(u8, stderr_buf[0..poll_res.stderr_len], '\n');
                 while (it.next()) |line| {
                     const clean = std.mem.trim(u8, line, "\r ");
                     if (clean.len == 0) continue;
+                    // Only surface engine errors/warnings in the TUI panel; info/debug go to engine.log
+                    if (!std.mem.startsWith(u8, clean, "error:") and !std.mem.startsWith(u8, clean, "warn:")) continue;
                     var ev = std.mem.zeroes(abi.TelemetryEvent_ABI);
                     ev.kind = .task_log;
                     ev.primary_name = abi.Slice_ABI.from("engine");

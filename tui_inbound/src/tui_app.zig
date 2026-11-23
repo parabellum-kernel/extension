@@ -125,6 +125,37 @@ pub const TuiApp = struct {
     status_len: usize = 0,
     raw_last_body: []u8 = &.{},
 
+    dispatch_mu: SpinMutex = .{},
+    dispatch_in_flight: bool = false,
+    dispatch_thread: ?std.Thread = null,
+    pending_dispatch_result: ?PendingDispatchResult = null,
+
+    const SpinMutex = struct {
+        locked: std.atomic.Value(bool) = .init(false),
+
+        fn lock(self: *SpinMutex) void {
+            while (self.locked.cmpxchgWeak(false, true, .acquire, .monotonic) != null) {
+                std.Thread.yield() catch {};
+            }
+        }
+
+        fn unlock(self: *SpinMutex) void {
+            self.locked.store(false, .release);
+        }
+    };
+
+    const PendingDispatchResult = struct {
+        spec_id: []u8,
+        status_code: i32 = 0,
+        body: []u8 = &.{},
+        err_name: ?[]const u8 = null,
+
+        fn deinit(self: *PendingDispatchResult, alloc: Allocator) void {
+            alloc.free(self.spec_id);
+            if (self.body.len > 0) alloc.free(self.body);
+        }
+    };
+
     pub fn init(
         alloc: Allocator,
         catalog: cap.CapabilityCatalog,
@@ -195,6 +226,14 @@ pub const TuiApp = struct {
     }
 
     pub fn deinit(self: *TuiApp) void {
+        if (self.dispatch_thread) |t| {
+            t.join();
+            self.dispatch_thread = null;
+        }
+        if (self.pending_dispatch_result) |*pdr| {
+            pdr.deinit(self.alloc);
+            self.pending_dispatch_result = null;
+        }
         if (self.raw_last_body.len > 0) self.alloc.free(self.raw_last_body);
         for (self.nav_history.items) |*h| h.deinit(self.alloc);
         self.nav_history.deinit(self.alloc);
@@ -311,6 +350,19 @@ pub const TuiApp = struct {
     ) !void {
         if (!try self.state.selectCapabilityById(cap_id)) return;
         const spec = self.state.activeCapability() orelse return;
+        try self.dispatchSpec(spec, payload_json, dispatcher);
+    }
+
+    fn dispatchSpec(
+        self: *TuiApp,
+        spec: cap.CapabilitySpec,
+        payload_json: []const u8,
+        dispatcher: inbound.HostDispatcher,
+    ) !void {
+        if (self.ring.wakeup_fd != null) {
+            self.startAsyncDispatch(spec.id, payload_json, dispatcher);
+            return;
+        }
         self.setStatusFmt("Running {s}...", .{spec.id});
         const resp = dispatcher.dispatch(.{
             .command_or_route = spec.id,
@@ -320,18 +372,149 @@ pub const TuiApp = struct {
             self.setStatusFmt("Dispatch error: {s}", .{@errorName(err)});
             return;
         };
+        try self.applyDispatchResponse(spec, resp.status_code, resp.body, dispatcher);
+    }
 
+    fn startAsyncDispatch(
+        self: *TuiApp,
+        spec_id: []const u8,
+        payload_json: []const u8,
+        dispatcher: inbound.HostDispatcher,
+    ) void {
+        self.dispatch_mu.lock();
+        if (self.dispatch_in_flight) {
+            self.dispatch_mu.unlock();
+            self.setStatus("A job is already running...");
+            return;
+        }
+        self.dispatch_in_flight = true;
+        self.dispatch_mu.unlock();
+
+        if (self.dispatch_thread) |prev| {
+            prev.join();
+            self.dispatch_thread = null;
+        }
+
+        const owned_spec_id = self.alloc.dupe(u8, spec_id) catch {
+            self.dispatch_mu.lock();
+            self.dispatch_in_flight = false;
+            self.dispatch_mu.unlock();
+            self.setStatus("Out of memory starting dispatch");
+            return;
+        };
+        const owned_payload = self.alloc.dupe(u8, payload_json) catch {
+            self.alloc.free(owned_spec_id);
+            self.dispatch_mu.lock();
+            self.dispatch_in_flight = false;
+            self.dispatch_mu.unlock();
+            self.setStatus("Out of memory starting dispatch");
+            return;
+        };
+
+        self.setStatusFmt("Running {s}...", .{spec_id});
+        const t = std.Thread.spawn(.{}, dispatchWorkerThread, .{ self, owned_spec_id, owned_payload, dispatcher }) catch {
+            self.alloc.free(owned_spec_id);
+            self.alloc.free(owned_payload);
+            self.dispatch_mu.lock();
+            self.dispatch_in_flight = false;
+            self.dispatch_mu.unlock();
+            self.setStatus("Failed to spawn worker thread");
+            return;
+        };
+        self.dispatch_thread = t;
+    }
+
+    fn dispatchWorkerThread(
+        self: *TuiApp,
+        owned_spec_id: []u8,
+        owned_payload: []u8,
+        dispatcher: inbound.HostDispatcher,
+    ) void {
+        defer self.alloc.free(owned_payload);
+
+        var result = PendingDispatchResult{
+            .spec_id = owned_spec_id,
+        };
+        if (dispatcher.dispatch(.{
+            .command_or_route = owned_spec_id,
+            .payload = owned_payload,
+            .args_json = "{\"custom\":true,\"input\":\"job_json\"}",
+        })) |resp| {
+            result.status_code = resp.status_code;
+            result.body = self.alloc.dupe(u8, resp.body) catch &.{};
+        } else |err| {
+            result.err_name = @errorName(err);
+        }
+
+        self.dispatch_mu.lock();
+        if (self.pending_dispatch_result) |*old| {
+            old.deinit(self.alloc);
+        }
+        self.pending_dispatch_result = result;
+        self.dispatch_in_flight = false;
+        self.dispatch_mu.unlock();
+
+        if (self.ring.wakeup_fd) |wfd| {
+            const b = [1]u8{1};
+            _ = std.c.write(wfd, &b, 1);
+        }
+    }
+
+    fn pollCompletedDispatch(self: *TuiApp, dispatcher: inbound.HostDispatcher) !void {
+        self.dispatch_mu.lock();
+        const maybe_res = self.pending_dispatch_result;
+        self.pending_dispatch_result = null;
+        self.dispatch_mu.unlock();
+
+        var res = maybe_res orelse return;
+        defer res.deinit(self.alloc);
+
+        if (self.dispatch_thread) |t| {
+            t.join();
+            self.dispatch_thread = null;
+        }
+
+        if (res.err_name) |ename| {
+            self.setStatusFmt("Dispatch error: {s}", .{ename});
+            return;
+        }
+
+        if (!try self.state.selectCapabilityById(res.spec_id)) return;
+        const spec = self.state.activeCapability() orelse return;
+        try self.applyDispatchResponse(spec, res.status_code, res.body, dispatcher);
+    }
+
+    fn applyDispatchResponse(
+        self: *TuiApp,
+        spec: cap.CapabilitySpec,
+        status_code: i32,
+        body: []const u8,
+        dispatcher: inbound.HostDispatcher,
+    ) !void {
         if (self.raw_last_body.len > 0) self.alloc.free(self.raw_last_body);
-        self.raw_last_body = try self.alloc.dupe(u8, resp.body);
-        try self.state.result.loadResponse(spec, resp.status_code, resp.body);
+        self.raw_last_body = try self.alloc.dupe(u8, body);
+
+        for (self.config.custom_renderers) |cr| {
+            const match_cap = if (cr.capability_id) |cid| std.mem.eql(u8, cid, spec.id) else false;
+            const match_mime = if (cr.mime_type) |mt|
+                (spec.output.mime_type != null and std.mem.eql(u8, spec.output.mime_type.?, mt))
+            else
+                false;
+            if (match_cap or match_mime) {
+                cr.vtable.render(cr.vtable.ctx, spec.id, body) catch {};
+                break;
+            }
+        }
+
+        try self.state.result.loadResponse(spec, status_code, body);
         self.table_sort_next_col = 0;
-        self.setStatusFmt("{s} -> HTTP {d}", .{ spec.id, resp.status_code });
-        if (resp.status_code >= 200 and resp.status_code < 300) {
+        self.setStatusFmt("{s} -> HTTP {d}", .{ spec.id, status_code });
+        if (status_code >= 200 and status_code < 300) {
             self.hideFormPanel();
             self.focusKind(.output);
         }
         if (self.config.on_capability_complete) |cb| {
-            cb(self.config.on_capability_complete_ctx, self, spec.id, resp.status_code, dispatcher);
+            cb(self.config.on_capability_complete_ctx, self, spec.id, status_code, dispatcher);
         }
     }
 
@@ -410,6 +593,7 @@ pub const TuiApp = struct {
         }
 
         while (!self.should_quit) {
+            try self.pollCompletedDispatch(dispatcher);
             if (self.config.on_tick) |cb| {
                 cb(self.config.on_tick_ctx, self, dispatcher);
             }
@@ -984,42 +1168,7 @@ pub const TuiApp = struct {
         const payload_json = try self.state.serializeFormJson(self.alloc);
         defer self.alloc.free(payload_json);
 
-        self.setStatusFmt("Running {s}...", .{spec.id});
-        const resp = dispatcher.dispatch(.{
-            .command_or_route = spec.id,
-            .payload = payload_json,
-            .args_json = "{\"custom\":true,\"input\":\"job_json\"}",
-        }) catch |err| {
-            self.setStatusFmt("Dispatch error: {s}", .{@errorName(err)});
-            return;
-        };
-
-        if (self.raw_last_body.len > 0) self.alloc.free(self.raw_last_body);
-        self.raw_last_body = try self.alloc.dupe(u8, resp.body);
-
-        // Invoke custom RendererVTable if registered for capability_id or mime_type
-        for (self.config.custom_renderers) |cr| {
-            const match_cap = if (cr.capability_id) |cid| std.mem.eql(u8, cid, spec.id) else false;
-            const match_mime = if (cr.mime_type) |mt|
-                (spec.output.mime_type != null and std.mem.eql(u8, spec.output.mime_type.?, mt))
-            else
-                false;
-            if (match_cap or match_mime) {
-                cr.vtable.render(cr.vtable.ctx, spec.id, resp.body) catch {};
-                break;
-            }
-        }
-
-        try self.state.result.loadResponse(spec, resp.status_code, resp.body);
-        self.table_sort_next_col = 0;
-        self.setStatusFmt("{s} -> HTTP {d}", .{ spec.id, resp.status_code });
-        if (resp.status_code >= 200 and resp.status_code < 300) {
-            self.hideFormPanel();
-            self.focusKind(.output);
-        }
-        if (self.config.on_capability_complete) |cb| {
-            cb(self.config.on_capability_complete_ctx, self, spec.id, resp.status_code, dispatcher);
-        }
+        try self.dispatchSpec(spec, payload_json, dispatcher);
     }
 
     pub fn render(self: *TuiApp, screen: *Screen) void {

@@ -374,14 +374,18 @@ pub const RawTerminal = struct {
         }
         self.active = true;
 
-        // Isolate stderr so engine/driver logs never corrupt raw-mode TUI rendering
-        const saved = std.c.dup(std.c.STDERR_FILENO);
-        if (saved >= 0) {
-            if (std.c.pipe(&self.stderr_pipe) == 0) {
-                _ = std.c.dup2(self.stderr_pipe[1], std.c.STDERR_FILENO);
-                self.saved_stderr_fd = saved;
-            } else {
-                _ = std.c.close(saved);
+        // Isolate stderr only when it points to a tty so logs never corrupt raw-mode TUI rendering.
+        // When stderr is already redirected to a file, leave STDERR_FILENO untouched so crash
+        // stacktraces flush directly to the log file.
+        if (std.c.isatty(std.c.STDERR_FILENO) != 0) {
+            const saved = std.c.dup(std.c.STDERR_FILENO);
+            if (saved >= 0) {
+                if (std.c.pipe(&self.stderr_pipe) == 0) {
+                    _ = std.c.dup2(self.stderr_pipe[1], std.c.STDERR_FILENO);
+                    self.saved_stderr_fd = saved;
+                } else {
+                    _ = std.c.close(saved);
+                }
             }
         }
 

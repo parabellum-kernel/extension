@@ -91,12 +91,18 @@ pub fn build(b: *std.Build) void {
         ext_so.root_module.addImport("otp", otp_mod);
         ext_so.root_module.addImport("parabellum_mfa", mfa_mod);
         b.installArtifact(ext_so);
-        const ext_a = b.addLibrary(.{
+        const ext_a = sdk_build.addExtensionPlugin(b, sdk_dep, .{
+            .name = ext.name,
+            .root_source_file = b.path(ext.path),
+            .target = target,
+            .optimize = optimize,
             .linkage = .static,
-            .name = ext_so.name,
-            .root_module = ext_so.root_module,
         });
-        ext_a.bundle_compiler_rt = false;
+        ext_a.root_module.addImport("parabellum_platform", platform_mod);
+        ext_a.root_module.addImport("parabellum_yaml", yaml_mod);
+        ext_a.root_module.addImport("parabellum_crypto", crypto_mod);
+        ext_a.root_module.addImport("otp", otp_mod);
+        ext_a.root_module.addImport("parabellum_mfa", mfa_mod);
         b.installArtifact(ext_a);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);

@@ -1,6 +1,20 @@
 {
+  "group": "org.parabellum.extensions",
   "name": "parabellum_extensions",
   "version": "2.0.4",
+  "artifacts": {
+    "authentication": ["libext_authentication"],
+    "dag_viz": ["libext_dag_viz"],
+    "inbound_cli": ["libext_inbound_cli"],
+    "inbound_fs": ["libext_inbound_fs"],
+    "inbound_http": ["libext_inbound_http"],
+    "inbound_grpc": ["libext_inbound_grpc"],
+    "opentelemetry": ["libext_opentelemetry"],
+    "pcapng": ["libext_pcapng"],
+    "trace_jsonl": ["libext_trace_jsonl"],
+    "tui_inbound": ["libext_tui_inbound"],
+    "yaml_config": ["libext_yaml_config"]
+  },
   "packaging": {
     "default_format": "so"
   }

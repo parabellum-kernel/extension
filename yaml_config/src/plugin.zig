@@ -44,7 +44,7 @@ fn registerExtension(
     return .ok;
 }
 
-pub export const parabellum_extension_manifest = abi.ExtensionManifest_ABI{
+pub const manifest = abi.ExtensionManifest_ABI{
     .abi_version = abi.EXTENSION_ABI_VERSION,
     .min_engine_version = abi.common.SDK_VERSION,
     .extension_name = "yaml_config",
@@ -52,3 +52,7 @@ pub export const parabellum_extension_manifest = abi.ExtensionManifest_ABI{
     .register = registerExtension,
     .deinit = null,
 };
+
+comptime {
+    @export(&manifest, .{ .name = @import("plugin_options").manifest_symbol, .linkage = .strong });
+}

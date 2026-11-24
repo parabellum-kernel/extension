@@ -101,7 +101,7 @@ pub const manifest = sdk.extension.Extension.define(.{
 });
 
 comptime {
-    @export(&manifest, .{ .name = abi.EXTENSION_MANIFEST_SYMBOL_NAME, .linkage = .strong });
+    @export(&manifest, .{ .name = @import("plugin_options").manifest_symbol, .linkage = .strong });
 }
 
 test "inbound_http C-ABI extension manifest" {

@@ -91,6 +91,13 @@ pub fn build(b: *std.Build) void {
         ext_so.root_module.addImport("otp", otp_mod);
         ext_so.root_module.addImport("parabellum_mfa", mfa_mod);
         b.installArtifact(ext_so);
+        const ext_a = b.addLibrary(.{
+            .linkage = .static,
+            .name = ext_so.name,
+            .root_module = ext_so.root_module,
+        });
+        ext_a.bundle_compiler_rt = false;
+        b.installArtifact(ext_a);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);
     }

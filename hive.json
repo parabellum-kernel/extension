@@ -1,0 +1,7 @@
+{
+  "name": "parabellum_extensions",
+  "version": "2.0.4",
+  "packaging": {
+    "default_format": "so"
+  }
+}

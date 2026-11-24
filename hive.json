@@ -1,7 +1,6 @@
 {
   "group": "org.parabellum.extensions",
   "name": "parabellum_extensions",
-  "version": "2.0.4",
   "artifacts": {
     "authentication": ["libext_authentication"],
     "dag_viz": ["libext_dag_viz"],

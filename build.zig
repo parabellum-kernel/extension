@@ -19,6 +19,9 @@ pub fn build(b: *std.Build) void {
     const crypto_mod = libs_dep.module("parabellum_crypto");
     const otp_mod = libs_dep.module("otp");
     const mfa_mod = libs_dep.module("parabellum_mfa");
+    const ver_opts = b.addOptions();
+    ver_opts.addOption([]const u8, "extension_version", @import("build.zig.zon").version);
+    const build_opts_mod = ver_opts.createModule();
 
     _ = b.addModule("ext_opentelemetry", .{
         .root_source_file = b.path("opentelemetry/src/opentelemetry.zig"),
@@ -28,6 +31,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "parabellum_sdk", .module = sdk_mod },
             .{ .name = "parabellum_platform", .module = platform_mod },
+            .{ .name = "build_options", .module = build_opts_mod },
         },
     });
     _ = b.addModule("ext_trace_jsonl", .{
@@ -38,6 +42,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "parabellum_sdk", .module = sdk_mod },
             .{ .name = "parabellum_platform", .module = platform_mod },
+            .{ .name = "build_options", .module = build_opts_mod },
         },
     });
 
@@ -90,6 +95,7 @@ pub fn build(b: *std.Build) void {
         ext_so.root_module.addImport("parabellum_crypto", crypto_mod);
         ext_so.root_module.addImport("otp", otp_mod);
         ext_so.root_module.addImport("parabellum_mfa", mfa_mod);
+        ext_so.root_module.addImport("build_options", build_opts_mod);
         b.installArtifact(ext_so);
         const ext_a = sdk_build.addExtensionPlugin(b, sdk_dep, .{
             .name = ext.name,
@@ -103,6 +109,7 @@ pub fn build(b: *std.Build) void {
         ext_a.root_module.addImport("parabellum_crypto", crypto_mod);
         ext_a.root_module.addImport("otp", otp_mod);
         ext_a.root_module.addImport("parabellum_mfa", mfa_mod);
+        ext_a.root_module.addImport("build_options", build_opts_mod);
         b.installArtifact(ext_a);
         const run_t = b.addRunArtifact(b.addTest(.{ .root_module = ext_so.root_module }));
         test_step.dependOn(&run_t.step);

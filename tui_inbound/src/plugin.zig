@@ -97,7 +97,7 @@ fn registerTuiInbound(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.K
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "tui_inbound",
-    .version = .{ .major = 2, .minor = 0, .patch = 3 },
+    .version = abi.SemVer_ABI.parse(@import("build_options").extension_version),
     .register = registerTuiInbound,
 });
 

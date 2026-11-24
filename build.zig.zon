@@ -1,6 +1,6 @@
 .{
     .name = .parabellum_extensions,
-    .version = "2.0.4",
+    .version = "2.0.5",
     .minimum_zig_version = "0.17.1",
     .fingerprint = 0xae71b774c2716dae,
     .dependencies = .{

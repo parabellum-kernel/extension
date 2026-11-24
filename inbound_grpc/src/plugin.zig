@@ -6,7 +6,7 @@ fn registerInboundGrpc(_: *abi.extension.KernelHandle_ABI, _: *const abi.KernelA
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_grpc",
-    .version = .{ .major = 2, .minor = 0, .patch = 3 },
+    .version = abi.SemVer_ABI.parse(@import("build_options").extension_version),
     .register = registerInboundGrpc,
 });
 

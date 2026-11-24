@@ -72,7 +72,7 @@ fn registerExt(kernel: *abi.extension.KernelHandle_ABI, api: *const abi.KernelAp
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "inbound_fs",
-    .version = .{ .major = 2, .minor = 0, .patch = 3 },
+    .version = abi.SemVer_ABI.parse(@import("build_options").extension_version),
     .register = registerExt,
 });
 

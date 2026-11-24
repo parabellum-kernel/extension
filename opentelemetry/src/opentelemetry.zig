@@ -138,7 +138,7 @@ fn registerOpenTelemetry(
 
 pub const manifest = sdk.extension.Extension.define(.{
     .name = "opentelemetry",
-    .version = .{ .major = 2, .minor = 0, .patch = 3 },
+    .version = abi.SemVer_ABI.parse(@import("build_options").extension_version),
     .register = registerOpenTelemetry,
 });
 

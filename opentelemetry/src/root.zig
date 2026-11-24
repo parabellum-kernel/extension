@@ -259,7 +259,7 @@ pub fn getGlobalOtel(allocator: Allocator) *OpenTelemetryExtension {
     if (global_otel_instance == null) {
         const svc_name = getEnv("OTEL_SERVICE_NAME") orelse "parabellum";
         var inst = OpenTelemetryExtension.init(allocator, svc_name);
-        inst.export_file_path = getEnv("OTEL_EXPORTER_FILE_PATH") orelse getEnv("PARABELLUM_OTEL_OUT");
+        inst.export_file_path = getEnv("PARABELLUM_OTEL_FILE") orelse getEnv("OTEL_EXPORTER_FILE_PATH") orelse getEnv("PARABELLUM_OTEL_OUT");
         global_otel_instance = inst;
     }
     return &global_otel_instance.?;

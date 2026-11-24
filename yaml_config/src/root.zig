@@ -352,6 +352,19 @@ fn parseFieldSpec(alloc: Allocator, env: *EnvInterpolator, node: YamlAst) !sdk.c
     };
 }
 
+pub fn loadCapabilityCatalogFile(alloc: Allocator, path: []const u8) !sdk.capabilities.CapabilityCatalog {
+    const bytes = try readFileAlloc(alloc, path);
+    if (std.mem.endsWith(u8, path, ".json")) {
+        const parsed = try std.json.parseFromSlice(sdk.capabilities.CapabilityCatalog, alloc, bytes, .{
+            .ignore_unknown_fields = true,
+        });
+        return parsed.value;
+    }
+    var env = EnvInterpolator.init(true);
+    const root_node = try yaml.parseAst(alloc, bytes, .{});
+    return try parseCapabilityCatalogYaml(alloc, &env, root_node);
+}
+
 fn parseCapabilityCatalogYaml(alloc: Allocator, env: *EnvInterpolator, root_node: YamlAst) !sdk.capabilities.CapabilityCatalog {
     const id = if (root_node.get("id")) |n| (if (n.asScalar()) |s| try interp(alloc, env, s) else "parabellum") else "parabellum";
     const name = if (root_node.get("name")) |n| (if (n.asScalar()) |s| try interp(alloc, env, s) else "Parabellum") else "Parabellum";
